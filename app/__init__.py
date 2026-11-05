@@ -20,6 +20,7 @@ def _ensure_schema_compatibility():
         "venue": "VARCHAR(160)",
         "tournament_date": "DATE",
         "description": "TEXT",
+        "champion_id": "INTEGER",
     }
     missing_columns = [
         (name, definition)
@@ -56,6 +57,7 @@ def _ensure_schema_compatibility():
         "status": "VARCHAR(20) NOT NULL DEFAULT 'scheduled'",
         "is_bye": "BOOLEAN NOT NULL DEFAULT 0",
         "next_match_id": "INTEGER",
+        "decided_by_tiebreaker": "BOOLEAN NOT NULL DEFAULT 0",
     }
     with db.engine.begin() as connection:
         for name, definition in match_additions.items():
@@ -63,6 +65,12 @@ def _ensure_schema_compatibility():
                 connection.execute(
                     text(f"ALTER TABLE matches ADD COLUMN {name} {definition}")
                 )
+        connection.execute(
+            text(
+                "UPDATE matches SET status = 'completed' "
+                "WHERE is_bye = 1 AND winner_id IS NOT NULL AND status = 'bye'"
+            )
+        )
 
 
 def create_app(config_class=Config):

@@ -9,6 +9,13 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from .extensions import db
 from .fixture_engine import MAX_TEAMS, generate_knockout_bracket
 from .models import Match, Player, Team, Tournament
+from .result_engine import (
+    ResultValidationError,
+    complete_match,
+    parse_score,
+    save_tied_result,
+    set_match_in_progress,
+)
 
 
 main_bp = Blueprint("main", __name__)
@@ -23,6 +30,14 @@ SPORTS = (
 )
 STATUSES = ("upcoming", "active", "completed")
 STATUS_LABELS = {"upcoming": "Upcoming", "active": "Active", "completed": "Completed"}
+MATCH_STATUS_LABELS = {
+    "scheduled": "Scheduled",
+    "ready": "Ready",
+    "in_progress": "In Progress",
+    "completed": "Completed",
+    "pending": "Scheduled",
+    "bye": "Completed",
+}
 
 
 @main_bp.get("/")
@@ -201,7 +216,7 @@ def teams():
 
     search = request.args.get("search", "").strip()
     tournament_id_value = request.args.get("tournament_id", "").strip()
-    query = Team.query.join(Tournament)
+    query = Team.query.join(Tournament, Team.tournament_id == Tournament.id)
     if search:
         query = query.filter(Team.name.ilike(f"%{search}%"))
     try:
@@ -311,6 +326,9 @@ def delete_team(team_id):
         db.session.query(Match).filter(Match.winner_id == team.id).update(
             {Match.winner_id: None}, synchronize_session=False
         )
+        db.session.query(Tournament).filter(Tournament.champion_id == team.id).update(
+            {Tournament.champion_id: None}, synchronize_session=False
+        )
         db.session.delete(team)
         db.session.commit()
     except SQLAlchemyError:
@@ -336,7 +354,7 @@ def players():
 
     search = request.args.get("search", "").strip()
     team_id_value = request.args.get("team_id", "").strip()
-    query = Player.query.join(Team).join(Tournament)
+    query = Player.query.join(Team).join(Tournament, Team.tournament_id == Tournament.id)
     if search:
         query = query.filter(Player.name.ilike(f"%{search}%"))
     try:
@@ -353,7 +371,7 @@ def players():
         "players.html",
         title="Players",
         players=query.order_by(Player.name.asc()).all(),
-        teams=Team.query.join(Tournament).order_by(Team.name.asc()).all(),
+        teams=Team.query.join(Tournament, Team.tournament_id == Tournament.id).order_by(Team.name.asc()).all(),
         filters={"search": search, "team_id": team_id_value},
     )
 
@@ -390,7 +408,7 @@ def new_player():
         eyebrow="Player management",
         form_data=form_data,
         errors=errors,
-        teams=Team.query.join(Tournament).order_by(Team.name.asc()).all(),
+        teams=Team.query.join(Tournament, Team.tournament_id == Tournament.id).order_by(Team.name.asc()).all(),
         submit_label="Register player",
     ), 400 if errors else 200
 
@@ -426,7 +444,7 @@ def edit_player(player_id):
         eyebrow="Player management",
         form_data=form_data,
         errors=errors,
-        teams=Team.query.join(Tournament).order_by(Team.name.asc()).all(),
+        teams=Team.query.join(Tournament, Team.tournament_id == Tournament.id).order_by(Team.name.asc()).all(),
         submit_label="Save changes",
         player=player,
     ), 400 if errors else 200
@@ -494,6 +512,7 @@ def matches():
         fixture_exists=bool(generated_matches),
         matches=generated_matches,
         bracket_rounds=bracket_rounds,
+        status_labels=MATCH_STATUS_LABELS,
     )
 
 
@@ -531,6 +550,85 @@ def generate_matches():
 
     flash(f"Fixtures generated for {tournament.name}.", "success")
     return redirect(url_for("main.matches", tournament_id=tournament.id))
+
+
+@main_bp.get("/matches/<int:match_id>")
+def match_detail(match_id):
+    """Show one match, its result, and any available result actions."""
+
+    match = db.get_or_404(Match, match_id)
+    return render_template(
+        "match_detail.html",
+        title=f"Match {match.match_number}",
+        match=match,
+        status_labels=MATCH_STATUS_LABELS,
+    )
+
+
+@main_bp.post("/matches/<int:match_id>/start")
+def start_match(match_id):
+    """Move an eligible match into the in-progress state."""
+
+    match = db.get_or_404(Match, match_id)
+    try:
+        set_match_in_progress(match)
+        db.session.commit()
+    except (ResultValidationError, SQLAlchemyError) as error:
+        db.session.rollback()
+        flash(str(error) if isinstance(error, ResultValidationError) else "The match could not be started.", "error")
+    else:
+        flash("Match marked In Progress.", "success")
+    return redirect(url_for("main.match_detail", match_id=match.id))
+
+
+@main_bp.post("/matches/<int:match_id>/result")
+def save_match_result(match_id):
+    """Save scores, determine a winner, or hold a tie for manual resolution."""
+
+    match = db.get_or_404(Match, match_id)
+    try:
+        home_score = parse_score(request.form.get("home_score"), "Team 1")
+        away_score = parse_score(request.form.get("away_score"), "Team 2")
+        if home_score == away_score:
+            save_tied_result(match, home_score, away_score)
+            db.session.commit()
+            flash("The match is tied. Select the winner after the tiebreaker.", "error")
+        else:
+            complete_match(match, home_score, away_score)
+            db.session.commit()
+            flash(f"{match.winner.name} won and advanced.", "success")
+    except (ResultValidationError, SQLAlchemyError) as error:
+        db.session.rollback()
+        flash(str(error) if isinstance(error, ResultValidationError) else "The result could not be saved. No changes were made.", "error")
+    return redirect(url_for("main.match_detail", match_id=match.id))
+
+
+@main_bp.post("/matches/<int:match_id>/resolve-tie")
+def resolve_match_tie(match_id):
+    """Confirm a manually selected winner for a tied match."""
+
+    match = db.get_or_404(Match, match_id)
+    try:
+        winner_id = int(request.form.get("winner_id", ""))
+        if match.home_score is None or match.away_score is None:
+            raise ResultValidationError("Enter and save tied scores before selecting a tiebreaker winner.")
+        complete_match(
+            match,
+            match.home_score,
+            match.away_score,
+            winner_id=winner_id,
+            by_tiebreaker=True,
+        )
+        db.session.commit()
+    except (ResultValidationError, SQLAlchemyError) as error:
+        db.session.rollback()
+        flash(str(error) if isinstance(error, ResultValidationError) else "The tie resolution could not be saved. No changes were made.", "error")
+    except (TypeError, ValueError):
+        db.session.rollback()
+        flash("Select a valid participating winner.", "error")
+    else:
+        flash(f"{match.winner.name} won after the tiebreaker and advanced.", "success")
+    return redirect(url_for("main.match_detail", match_id=match.id))
 
 
 @main_bp.get("/settings")

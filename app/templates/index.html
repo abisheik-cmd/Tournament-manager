@@ -46,7 +46,7 @@
     {% if recent_tournaments %}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Tournament</th><th>Sport</th><th>Date</th><th>Teams</th><th>Status</th><th><span class="sr-only">Action</span></th></tr></thead>
+          <thead><tr><th>Tournament</th><th>Sport</th><th>Date</th><th>Teams</th><th>Status</th><th>Champion</th><th><span class="sr-only">Action</span></th></tr></thead>
           <tbody>
           {% for tournament in recent_tournaments %}
             <tr>
@@ -55,6 +55,7 @@
               <td>{{ tournament.tournament_date.strftime('%d %b %Y') if tournament.tournament_date else (tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—') }}</td>
               <td>{{ tournament.teams|length }}</td>
               <td><span class="badge badge-{{ tournament.status|lower }}">{{ tournament.status|capitalize }}</span></td>
+              <td>{{ tournament.champion.name if tournament.champion else '—' }}</td>
               <td><a class="row-action" href="{{ url_for('main.tournament_detail', tournament_id=tournament.id) }}" aria-label="View {{ tournament.name }}">View <span>→</span></a></td>
             </tr>
           {% endfor %}
@@ -73,7 +74,7 @@
       <a class="quick-action" href="{{ url_for('main.tournaments') }}"><span class="quick-icon quick-icon-purple">◈</span><span><strong>View tournaments</strong><small>Browse all competitions</small></span><span class="quick-arrow">→</span></a>
       <a class="quick-action" href="{{ url_for('main.teams') }}"><span class="quick-icon quick-icon-orange">◇</span><span><strong>Manage teams</strong><small>Organize your participants</small></span><span class="quick-arrow">→</span></a>
     </div>
-    <div class="tip-card"><span class="tip-mark">i</span><p><strong>Build your bracket</strong><br>Fixtures and knockout generation are coming in the next module.</p></div>
+    <div class="tip-card"><span class="tip-mark">i</span><p><strong>Keep matches moving</strong><br>Open Match Fixtures to enter results and advance winners.</p></div>
   </aside>
 </div>
 {% endblock %}

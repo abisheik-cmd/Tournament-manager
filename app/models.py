@@ -19,16 +19,21 @@ class Tournament(db.Model):
     tournament_date = db.Column(db.Date, nullable=True)
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="active")
+    champion_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
     created_at = db.Column(
         db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
     teams = db.relationship(
-        "Team", back_populates="tournament", cascade="all, delete-orphan"
+        "Team",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        foreign_keys="Team.tournament_id",
     )
     matches = db.relationship(
         "Match", back_populates="tournament", cascade="all, delete-orphan"
     )
+    champion = db.relationship("Team", foreign_keys=[champion_id])
 
 
 class Team(db.Model):
@@ -47,7 +52,9 @@ class Team(db.Model):
         db.Integer, db.ForeignKey("tournaments.id"), nullable=False
     )
 
-    tournament = db.relationship("Tournament", back_populates="teams")
+    tournament = db.relationship(
+        "Tournament", back_populates="teams", foreign_keys=[tournament_id]
+    )
     players = db.relationship(
         "Player", back_populates="team", cascade="all, delete-orphan"
     )
@@ -94,6 +101,7 @@ class Match(db.Model):
     away_score = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="scheduled")
     is_bye = db.Column(db.Boolean, nullable=False, default=False)
+    decided_by_tiebreaker = db.Column(db.Boolean, nullable=False, default=False)
     tournament_id = db.Column(
         db.Integer, db.ForeignKey("tournaments.id"), nullable=False
     )

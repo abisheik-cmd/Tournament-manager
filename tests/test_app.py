@@ -360,7 +360,7 @@ def test_fixture_engine_generates_valid_bracket_for_every_supported_team_count(t
             if match.is_bye:
                 assert match.away_team_id is None
                 assert match.winner_id == match.home_team_id
-                assert match.status == "bye"
+                assert match.status == "completed"
 
 
 def test_fixture_generation_route_requires_eligibility_and_prevents_duplicates():
@@ -437,3 +437,168 @@ def test_fixture_engine_rejects_more_than_64_teams():
         tournament, teams = _fixture_tournament(65, name="Too Large")
         with pytest.raises(ValueError, match="at most 64"):
             generate_knockout_bracket(tournament, teams)
+
+
+from app.result_engine import ResultValidationError, complete_match
+
+
+def _generated_match_app(tmp_path=None, team_count=4):
+    config = TestConfig
+    if tmp_path is not None:
+        class FileConfig(TestConfig):
+            SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path / 'module6.db'}"
+        config = FileConfig
+    app = create_app(config)
+    with app.app_context():
+        tournament, teams = _fixture_tournament(team_count, name=f"Scoring Cup {team_count}")
+        generate_knockout_bracket(tournament, teams, rng=random.Random(41))
+        db.session.commit()
+        tournament_id = tournament.id
+    return app, tournament_id
+
+
+def _round_matches(tournament, round_number):
+    return sorted([match for match in tournament.matches if match.round_number == round_number], key=lambda match: match.match_number)
+
+
+def test_team_one_and_team_two_score_wins_progress_to_correct_next_slots():
+    app, tournament_id = _generated_match_app(team_count=4)
+    with app.app_context():
+        tournament = db.session.get(Tournament, tournament_id)
+        first, second = _round_matches(tournament, 1)
+        first_winner_id, second_winner_id = first.home_team_id, second.away_team_id
+        first_id, second_id, next_id = first.id, second.id, first.next_match_id
+    with app.test_client() as client:
+        assert client.post(f"/matches/{first_id}/result", data={"home_score": "3", "away_score": "1"}).status_code == 302
+        assert client.post(f"/matches/{second_id}/result", data={"home_score": "0", "away_score": "2"}).status_code == 302
+    with app.app_context():
+        first_match, second_match, next_match = db.session.get(Match, first_id), db.session.get(Match, second_id), db.session.get(Match, next_id)
+        assert first_match.winner_id == first_winner_id and second_match.winner_id == second_winner_id
+        first_slot = "home_team_id" if first_match.match_number % 2 else "away_team_id"
+        second_slot = "home_team_id" if second_match.match_number % 2 else "away_team_id"
+        assert getattr(next_match, first_slot) == first_winner_id and getattr(next_match, second_slot) == second_winner_id
+        assert next_match.status == "ready"
+
+
+def test_negative_invalid_and_missing_scores_are_rejected():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        match_id = _round_matches(db.session.get(Tournament, tournament_id), 1)[0].id
+    with app.test_client() as client:
+        for scores, message in [({"home_score": "-1", "away_score": "2"}, b"cannot be negative"), ({"home_score": "abc", "away_score": "2"}, b"whole number"), ({"home_score": "", "away_score": "2"}, b"is required")]:
+            response = client.post(f"/matches/{match_id}/result", data=scores, follow_redirects=True)
+            assert response.status_code == 200 and message in response.data
+    with app.app_context():
+        match = db.session.get(Match, match_id)
+        assert match.home_score is None and match.away_score is None and match.winner_id is None
+
+
+def test_tie_requires_manual_tiebreaker_and_records_decision():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        match = _round_matches(db.session.get(Tournament, tournament_id), 1)[0]
+        match_id, away_id = match.id, match.away_team_id
+    with app.test_client() as client:
+        tied = client.post(f"/matches/{match_id}/result", data={"home_score": "2", "away_score": "2"}, follow_redirects=True)
+        assert tied.status_code == 200 and b"Tie resolution required" in tied.data
+        resolved = client.post(f"/matches/{match_id}/resolve-tie", data={"winner_id": str(away_id)}, follow_redirects=True)
+        assert resolved.status_code == 200 and b"won after the tiebreaker" in resolved.data
+    with app.app_context():
+        match = db.session.get(Match, match_id)
+        assert match.status == "completed" and match.winner_id == away_id and match.decided_by_tiebreaker is True
+
+
+def test_bye_is_completed_and_automatically_occupies_next_slot():
+    app, tournament_id = _generated_match_app(team_count=3)
+    with app.app_context():
+        bye = next(match for match in db.session.get(Tournament, tournament_id).matches if match.is_bye)
+        assert bye.status == "completed" and bye.winner_id == bye.home_team_id
+        assert bye.next_match is not None and bye.winner_id in {bye.next_match.home_team_id, bye.next_match.away_team_id}
+
+
+def test_match_status_transitions_from_scheduled_to_in_progress_to_completed():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        match_id = _round_matches(db.session.get(Tournament, tournament_id), 1)[0].id
+        assert db.session.get(Match, match_id).status == "scheduled"
+    with app.test_client() as client:
+        assert client.post(f"/matches/{match_id}/start").status_code == 302
+        assert client.post(f"/matches/{match_id}/result", data={"home_score": "1", "away_score": "0"}).status_code == 302
+    with app.app_context():
+        assert db.session.get(Match, match_id).status == "completed"
+
+
+def test_final_completion_sets_champion_tournament_status_and_dashboard_display():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        match = _round_matches(db.session.get(Tournament, tournament_id), 1)[0]
+        match_id, winner_id = match.id, match.home_team_id
+    with app.test_client() as client:
+        response = client.post(f"/matches/{match_id}/result", data={"home_score": "4", "away_score": "0"}, follow_redirects=True)
+        assert response.status_code == 200 and b"Winner confirmed" in response.data
+        assert b"Tournament champion" in client.get(f"/tournaments/{tournament_id}").data and b"Champion" in client.get("/").data
+    with app.app_context():
+        tournament = db.session.get(Tournament, tournament_id)
+        assert tournament.status == "completed" and tournament.champion_id == winner_id
+
+
+def test_result_correction_and_bye_score_entry_are_blocked_safely():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        final_id = _round_matches(db.session.get(Tournament, tournament_id), 1)[0].id
+    with app.test_client() as client:
+        client.post(f"/matches/{final_id}/result", data={"home_score": "2", "away_score": "1"})
+        correction = client.post(f"/matches/{final_id}/result", data={"home_score": "0", "away_score": "9"}, follow_redirects=True)
+        assert correction.status_code == 200 and b"Result corrections are blocked" in correction.data
+    with app.app_context():
+        final = db.session.get(Match, final_id)
+        assert final.home_score == 2 and final.away_score == 1
+    bye_app, bye_tournament_id = _generated_match_app(team_count=3)
+    with bye_app.app_context():
+        bye_id = next(match.id for match in db.session.get(Tournament, bye_tournament_id).matches if match.is_bye)
+    with bye_app.test_client() as client:
+        response = client.post(f"/matches/{bye_id}/result", data={"home_score": "1", "away_score": "0"}, follow_redirects=True)
+        assert b"BYE matches" in response.data
+
+
+def test_duplicate_progression_is_rejected_without_overwriting_next_slot():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        match = _round_matches(db.session.get(Tournament, tournament_id), 1)[0]
+        complete_match(match, 3, 1)
+        db.session.commit()
+        with pytest.raises(ResultValidationError, match="already completed"):
+            complete_match(match, 4, 0)
+        assert match.home_score == 3 and match.away_score == 1
+
+
+def test_match_results_persist_after_application_restart(tmp_path):
+    app, tournament_id = _generated_match_app(tmp_path=tmp_path, team_count=2)
+    with app.app_context():
+        match_id = _round_matches(db.session.get(Tournament, tournament_id), 1)[0].id
+    with app.test_client() as client:
+        client.post(f"/matches/{match_id}/result", data={"home_score": "5", "away_score": "3"})
+    class FileConfig(TestConfig):
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path / 'module6.db'}"
+    restarted_app = create_app(FileConfig)
+    with restarted_app.app_context():
+        match = db.session.get(Match, match_id)
+        assert match.home_score == 5 and match.away_score == 3 and match.status == "completed" and match.tournament.status == "completed"
+
+
+def test_waiting_match_and_invalid_tiebreaker_winner_are_rejected():
+    app, tournament_id = _generated_match_app(team_count=3)
+    with app.app_context():
+        tournament = db.session.get(Tournament, tournament_id)
+        waiting = next(match for match in tournament.matches if match.round_number == 2)
+        real_match = next(match for match in _round_matches(tournament, 1) if not match.is_bye)
+        outsider = Team(name="Outsider", captain_name="Captain", tournament=tournament)
+        db.session.add(outsider)
+        db.session.commit()
+        waiting_id, real_match_id, outsider_id = waiting.id, real_match.id, outsider.id
+    with app.test_client() as client:
+        waiting_result = client.post(f"/matches/{waiting_id}/result", data={"home_score": "1", "away_score": "0"}, follow_redirects=True)
+        assert b"waiting for both participating teams" in waiting_result.data
+        client.post(f"/matches/{real_match_id}/result", data={"home_score": "2", "away_score": "2"})
+        invalid_winner = client.post(f"/matches/{real_match_id}/resolve-tie", data={"winner_id": str(outsider_id)}, follow_redirects=True)
+        assert b"The selected winner must be one of the participating teams" in invalid_winner.data

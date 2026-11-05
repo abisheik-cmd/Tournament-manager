@@ -95,7 +95,7 @@ def generate_knockout_bracket(tournament, teams, rng=None):
             team_index += 1
             away_team = None
             is_bye = True
-            status = "bye"
+            status = "completed"
             winner = home_team
         else:
             home_team = team_list[team_index]
@@ -151,5 +151,9 @@ def generate_knockout_bracket(tournament, teams, rng=None):
                     next_match.home_team_id = match.winner_id
                 else:
                     next_match.away_team_id = match.winner_id
+
+    for bracket_round in rounds[1:]:
+        for match in bracket_round:
+            match.status = "ready" if match.home_team_id and match.away_team_id else "scheduled"
 
     return all_matches
