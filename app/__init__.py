@@ -1,7 +1,7 @@
 """Application package and factory."""
 
 import click
-from flask import Flask
+from flask import Flask, render_template
 from sqlalchemy import inspect, text
 
 from config import Config
@@ -85,6 +85,37 @@ def create_app(config_class=Config):
     from .routes import main_bp
 
     app.register_blueprint(main_bp)
+
+    @app.errorhandler(404)
+    def not_found_error(_error):
+        return render_template(
+            "error.html",
+            title="Page not found",
+            status_code=404,
+            heading="Page not found",
+            message="The page or record you requested could not be found.",
+        ), 404
+
+    @app.errorhandler(405)
+    def method_not_allowed_error(_error):
+        return render_template(
+            "error.html",
+            title="Method not allowed",
+            status_code=405,
+            heading="Method not allowed",
+            message="This action is not available using that HTTP method.",
+        ), 405
+
+    @app.errorhandler(500)
+    def internal_server_error(_error):
+        db.session.rollback()
+        return render_template(
+            "error.html",
+            title="Something went wrong",
+            status_code=500,
+            heading="Something went wrong",
+            message="The request could not be completed. No changes were saved.",
+        ), 500
 
     with app.app_context():
         db.create_all()

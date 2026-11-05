@@ -602,3 +602,76 @@ def test_waiting_match_and_invalid_tiebreaker_winner_are_rejected():
         client.post(f"/matches/{real_match_id}/result", data={"home_score": "2", "away_score": "2"})
         invalid_winner = client.post(f"/matches/{real_match_id}/resolve-tie", data={"winner_id": str(outsider_id)}, follow_redirects=True)
         assert b"The selected winner must be one of the participating teams" in invalid_winner.data
+
+
+
+def test_fixture_edge_cases_for_zero_one_and_sixty_five_teams():
+    app = create_app(TestConfig)
+    with app.app_context():
+        empty_tournament = _create_tournament("Empty Cup")
+        one_team_tournament, _ = _fixture_tournament(1, name="One Team Cup")
+        large_tournament, _ = _fixture_tournament(65, name="Oversized Cup")
+        empty_id, one_team_id, large_id = empty_tournament.id, one_team_tournament.id, large_tournament.id
+        with app.test_client() as client:
+            for tournament_id, message in ((empty_id, b"At least 2 registered teams"), (one_team_id, b"At least 2 registered teams"), (large_id, b"at most 64 teams")):
+                response = client.post("/matches/generate", data={"tournament_id": str(tournament_id)}, follow_redirects=True)
+                assert response.status_code == 200 and message in response.data
+        assert db.session.query(Match).count() == 0
+
+
+def test_deleting_team_after_fixture_generation_clears_all_team_references():
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament, teams = _fixture_tournament(4, name="Delete After Fixtures")
+        tournament_id, deleted_team_id = tournament.id, teams[0].id
+        generate_knockout_bracket(tournament, teams, rng=random.Random(8))
+        db.session.commit()
+    with app.test_client() as client:
+        response = client.post(f"/teams/{deleted_team_id}/delete")
+        assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(Team, deleted_team_id) is None
+        matches = db.session.query(Match).filter_by(tournament_id=tournament_id).all()
+        assert all(deleted_team_id not in {match.home_team_id, match.away_team_id, match.winner_id} for match in matches)
+
+
+def test_deleting_completed_tournament_with_champion_preserves_foreign_key_integrity():
+    app, tournament_id = _generated_match_app(team_count=2)
+    with app.app_context():
+        final = _round_matches(db.session.get(Tournament, tournament_id), 1)[0]
+        complete_match(final, 2, 0)
+        db.session.commit()
+    with app.test_client() as client:
+        response = client.post(f"/tournaments/{tournament_id}/delete")
+        assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(Tournament, tournament_id) is None
+        assert db.session.query(Team).count() == 0
+        assert db.session.query(Match).count() == 0
+
+
+def test_invalid_methods_missing_records_and_unsafe_logo_urls_are_handled_cleanly():
+    app = create_app(TestConfig)
+    with app.test_client() as client:
+        assert client.post("/").status_code == 405
+        assert b"Method not allowed" in client.post("/").data
+        assert client.get("/tournaments/999999/delete").status_code == 405
+        missing = client.get("/tournaments/999999")
+        assert missing.status_code == 404 and b"Page not found" in missing.data
+        invalid_logo = client.post("/teams/new", data={"name": "Unsafe", "captain_name": "Captain", "logo_url": "javascript:alert(1)", "tournament_id": "999"})
+        assert invalid_logo.status_code == 400
+        assert b"valid http or https" in invalid_logo.data
+
+
+def test_user_supplied_html_is_escaped_and_configuration_is_not_debug_by_default():
+    from config import Config
+
+    app = create_app(TestConfig)
+    form = {"name": "<script>alert(1)</script>", "sport": "Football", "venue": "Safe Arena", "tournament_date": "2026-11-05", "description": "<b>safe text</b>", "status": "upcoming"}
+    with app.test_client() as client:
+        response = client.post("/tournaments/new", data=form)
+        assert response.status_code == 302
+        detail = client.get(response.headers["Location"])
+        assert b"&lt;script&gt;alert(1)&lt;/script&gt;" in detail.data
+        assert b"<script>alert(1)</script>" not in detail.data
+    assert Config.DEBUG is False

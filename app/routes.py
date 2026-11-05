@@ -1,10 +1,10 @@
 """Web routes for the tournament application."""
 
 from datetime import date, datetime
-
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from urllib.parse import urlparse
 
 from .extensions import db
 from .fixture_engine import MAX_TEAMS, generate_knockout_bracket
@@ -190,6 +190,7 @@ def delete_tournament(tournament_id):
     tournament = db.get_or_404(Tournament, tournament_id)
     tournament_name = tournament.name
     try:
+        tournament.champion_id = None
         db.session.delete(tournament)
         db.session.commit()
     except SQLAlchemyError:
@@ -746,6 +747,8 @@ def _validate_team_form(form_data, current_team=None):
 
     if form_data["logo_url"] and len(form_data["logo_url"]) > 500:
         errors["logo_url"] = "Logo URL must be 500 characters or fewer."
+    if form_data["logo_url"] and not _is_safe_external_url(form_data["logo_url"]):
+        errors["logo_url"] = "Logo URL must use a valid http or https address."
 
     return errors, {
         "name": form_data["name"],
@@ -753,6 +756,12 @@ def _validate_team_form(form_data, current_team=None):
         "logo_url": form_data["logo_url"] or None,
         "tournament_id": tournament_id,
     }
+
+
+def _is_safe_external_url(value):
+    """Allow only absolute HTTP(S) URLs for externally hosted team logos."""
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 def _player_form_data(player=None):

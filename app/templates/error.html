@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="placeholder-page error-page">
+  <span class="placeholder-orb">{{ status_code }}</span>
+  <p class="eyebrow">Request status</p>
+  <h1>{{ heading }}</h1>
+  <p class="page-subtitle">{{ message }}</p>
+  <a class="button button-secondary" href="{{ url_for('main.home') }}">← Back to dashboard</a>
+</section>
+{% endblock %}
