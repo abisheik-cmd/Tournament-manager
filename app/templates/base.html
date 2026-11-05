@@ -10,18 +10,31 @@
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
         <div class="brand">
-          <span class="brand-mark">TM</span><span class="sr-only">Tournament Matchup Generator</span>
-          <span class="brand-copy"><strong>Tournament</strong><small>Matchup Generator</small></span>
+          <span class="brand-mark">CS</span>
+          <span class="sr-only">Tournament Matchup Generator</span>
+          <span class="brand-copy"><strong>CourtSide Pro</strong><small>Tournament OS</small></span>
         </div>
         <nav class="sidebar-nav" aria-label="Primary navigation">
           <p class="nav-label">Workspace</p>
-          <a class="nav-link {% if request.endpoint == 'main.home' %}is-active{% endif %}" href="{{ url_for('main.home') }}"><span class="nav-icon">⌂</span>Dashboard</a>
-          <a class="nav-link {% if request.endpoint in ['main.tournaments', 'main.new_tournament', 'main.tournament_detail', 'main.edit_tournament'] %}is-active{% endif %}" href="{{ url_for('main.tournaments') }}"><span class="nav-icon">◈</span>Tournaments</a>
-          <a class="nav-link {% if request.endpoint in ['main.teams', 'main.new_team', 'main.team_detail', 'main.edit_team'] %}is-active{% endif %}" href="{{ url_for('main.teams') }}"><span class="nav-icon">◇</span>Teams</a>
-          <a class="nav-link {% if request.endpoint in ['main.players', 'main.new_player', 'main.player_detail', 'main.edit_player'] %}is-active{% endif %}" href="{{ url_for('main.players') }}"><span class="nav-icon">◎</span>Players</a>
-          <a class="nav-link {% if request.endpoint in ['main.matches', 'main.generate_matches'] %}is-active{% endif %}" href="{{ url_for('main.matches') }}"><span class="nav-icon">↔</span>Match Fixtures</a>
+          <a class="nav-link {% if request.endpoint == 'main.home' %}is-active{% endif %}" href="{{ url_for('main.home') }}">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9 20v-5h6v5"/></svg></span>Dashboard
+          </a>
+          <a class="nav-link {% if request.endpoint in ['main.tournaments', 'main.new_tournament', 'main.tournament_detail', 'main.edit_tournament'] %}is-active{% endif %}" href="{{ url_for('main.tournaments') }}">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>Tournaments
+          </a>
+          <a class="nav-link {% if request.endpoint in ['main.teams', 'main.new_team', 'main.team_detail', 'main.edit_team'] %}is-active{% endif %}" href="{{ url_for('main.teams') }}">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c.7-3.2 2.5-5 5.5-5s4.8 1.8 5.5 5M14 15.5c2.8-.7 5.2.7 6.5 4.5"/></svg></span>Teams
+          </a>
+          <a class="nav-link {% if request.endpoint in ['main.players', 'main.new_player', 'main.player_detail', 'main.edit_player'] %}is-active{% endif %}" href="{{ url_for('main.players') }}">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 20c.8-4 3.1-6 7-6s6.2 2 7 6"/><path d="M18 5.5h3M19.5 4v3"/></svg></span>Players
+          </a>
+          <a class="nav-link {% if request.endpoint in ['main.matches', 'main.generate_matches'] %}is-active{% endif %}" href="{{ url_for('main.matches') }}">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h5v5H5zM14 14h5v5h-5z"/><path d="m10 7 4 4M10 17h4M7 10v4"/></svg></span>Match Fixtures
+          </a>
           <p class="nav-label nav-label-spaced">System</p>
-          <a class="nav-link {% if request.endpoint == 'main.settings' %}is-active{% endif %}" href="{{ url_for('main.settings') }}"><span class="nav-icon">⚙</span>Settings</a>
+          <a class="nav-link {% if request.endpoint == 'main.settings' %}is-active{% endif %}" href="{{ url_for('main.settings') }}">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.1h-2.6v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.5-1H6v-2.6h.1A1.7 1.7 0 0 0 7.6 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1L9 6.2l.1.1A1.7 1.7 0 0 0 11 6a1.7 1.7 0 0 0 1-1.5V4h2.6v.1A1.7 1.7 0 0 0 15.6 6a1.7 1.7 0 0 0 1.9.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1V14h-.1a1.7 1.7 0 0 0-1.1 1z"/></svg></span>Settings
+          </a>
         </nav>
         <div class="sidebar-footer"><span class="pulse-dot"></span><span>SQLite connected</span></div>
       </aside>
@@ -29,7 +42,7 @@
         <header class="topbar">
           <button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
           <div class="breadcrumb"><span>Workspace</span><span class="breadcrumb-separator">/</span><strong>{{ title or "Dashboard" }}</strong></div>
-          <div class="topbar-meta"><span class="status-dot"></span><span>System ready</span></div>
+          <div class="topbar-meta"><span class="status-dot"></span><span>System ready</span><span class="topbar-chip">CourtSide Pro</span></div>
         </header>
         <main class="content-area">
           {% block content %}{% endblock %}
