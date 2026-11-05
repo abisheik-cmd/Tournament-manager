@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+from sqlalchemy import UniqueConstraint
+
 from .extensions import db
 
 
@@ -33,9 +35,14 @@ class Team(db.Model):
     """A team registered in a tournament."""
 
     __tablename__ = "teams"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "name", name="uq_team_name_tournament"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
+    captain_name = db.Column(db.String(120), nullable=True)
+    logo_url = db.Column(db.String(500), nullable=True)
     tournament_id = db.Column(
         db.Integer, db.ForeignKey("tournaments.id"), nullable=False
     )
@@ -60,10 +67,14 @@ class Player(db.Model):
     """A player belonging to a team."""
 
     __tablename__ = "players"
+    __table_args__ = (
+        UniqueConstraint("team_id", "jersey_number", name="uq_jersey_number_team"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     jersey_number = db.Column(db.Integer, nullable=True)
+    position = db.Column(db.String(80), nullable=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
 
     team = db.relationship("Team", back_populates="players")

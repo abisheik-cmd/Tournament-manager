@@ -33,6 +33,22 @@ def _ensure_schema_compatibility():
                     text(f"ALTER TABLE tournaments ADD COLUMN {name} {definition}")
                 )
 
+    team_columns = {column["name"] for column in inspector.get_columns("teams")}
+    player_columns = {column["name"] for column in inspector.get_columns("players")}
+    team_additions = {"captain_name": "VARCHAR(120)", "logo_url": "VARCHAR(500)"}
+    player_additions = {"position": "VARCHAR(80)"}
+    with db.engine.begin() as connection:
+        for name, definition in team_additions.items():
+            if name not in team_columns:
+                connection.execute(
+                    text(f"ALTER TABLE teams ADD COLUMN {name} {definition}")
+                )
+        for name, definition in player_additions.items():
+            if name not in player_columns:
+                connection.execute(
+                    text(f"ALTER TABLE players ADD COLUMN {name} {definition}")
+                )
+
 
 def create_app(config_class=Config):
     """Create and configure a Flask application instance."""

@@ -1,6 +1,6 @@
 # Tournament Matchup Generator – Multi-Sport Knockout Management System
 
-A beginner-friendly Flask application for managing multi-sport knockout tournaments. Modules 1 and 2 provide the Flask/SQLite foundation and responsive dashboard. Module 3 adds tournament creation, search/filter listing, editing, deletion, and detailed views.
+A beginner-friendly Flask application for managing multi-sport knockout tournaments. Modules 1 and 2 provide the Flask/SQLite foundation and responsive dashboard. Module 3 adds tournament CRUD. Module 4 adds team registration, roster management, scoped duplicate protection, and team/player detail views.
 
 ## Technology
 
@@ -18,11 +18,11 @@ A beginner-friendly Flask application for managing multi-sport knockout tourname
 │   ├── __init__.py       # Application factory and safe additive schema upgrades
 │   ├── extensions.py     # Shared SQLAlchemy extension
 │   ├── models.py         # Tournament, Team, Player, and Match models
-│   ├── routes.py         # Dashboard, tournament CRUD, filters, and placeholders
+│   ├── routes.py         # Dashboard, tournament, team, player, and placeholder routes
 │   ├── static/           # Responsive CSS and vanilla JavaScript
-│   └── templates/        # Dashboard, management, detail, and form templates
+│   └── templates/        # Management, detail, form, and dashboard templates
 ├── instance/             # Local SQLite database (created at runtime)
-├── tests/                # Foundation, dashboard, and CRUD tests
+├── tests/                # Foundation, dashboard, tournament, team, and player tests
 ├── config.py             # Application configuration
 ├── requirements.txt      # Python dependencies
 └── run.py                # Development entry point
@@ -45,7 +45,7 @@ The application creates the SQLite database and tables when the app is created. 
 flask --app run.py init-db
 ```
 
-The database is stored at `instance/tournament.db`. It is intentionally not browser localStorage. The application applies safe additive upgrades to older databases by adding new columns when needed.
+The database is stored at `instance/tournament.db`. It is intentionally not browser localStorage. The application applies safe additive upgrades to older databases by adding new columns when needed. Module 4 adds `teams.captain_name`, `teams.logo_url`, and `players.position` without recreating or erasing existing data.
 
 ## Run the application
 
@@ -55,11 +55,11 @@ flask --app run.py run --debug
 
 Open <http://127.0.0.1:5000/> in a browser. The home route is the dashboard. Alternatively, run `python run.py`.
 
-## Tournament management
+## Team and player management
 
-Use **Tournaments** in the sidebar to create and manage records. Creation and editing validate the tournament name, sport, venue, date, and status on the backend; the HTML form also marks required fields for browser validation. Tournament listing supports name search plus sport and status filters. Deletion requires a browser confirmation and removes associated teams, players, and matches through SQLAlchemy cascade relationships inside a database transaction.
+Use **Teams** in the sidebar to register teams under existing tournaments, search by team name, filter by tournament, edit team details, and delete teams with confirmation. Team names are unique within a tournament but can be reused in another tournament.
 
-Supported sports are Football, Cricket, Basketball, Volleyball, Badminton, Tennis, and Other. Supported statuses are Upcoming, Active, and Completed.
+Use **Players** to register players under teams, optionally assign jersey numbers and positions, edit or delete players, and view team/tournament associations. Jersey numbers are unique within each team when provided. Team deletion cascades to its players; existing matches retain their tournament record with deleted team references cleared.
 
 ## Run tests
 

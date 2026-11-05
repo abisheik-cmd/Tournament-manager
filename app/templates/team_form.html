@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading compact-heading"><div><p class="eyebrow">{{ eyebrow }}</p><h1>{{ heading }}</h1><p class="page-subtitle">Connect a team to an existing tournament.</p></div><a class="button button-secondary" href="{{ url_for('main.teams') }}">← Back to teams</a></section>
+<section class="panel form-panel"><form method="post" class="tournament-form" novalidate>
+  {% if errors.form %}<div class="notice notice-error" role="alert">{{ errors.form }}</div>{% endif %}
+  <div class="form-section"><div class="form-section-heading"><span class="form-step">01</span><div><h2>Team identity</h2><p>Make the team easy to recognize.</p></div></div><div class="form-grid">
+    <div class="form-field"><label for="name">Team name <span>*</span></label><input id="name" name="name" type="text" maxlength="120" value="{{ form_data.name }}" placeholder="e.g. North Stars" required aria-invalid="{{ 'true' if errors.name else 'false' }}">{% if errors.name %}<small class="field-error">{{ errors.name }}</small>{% endif %}</div>
+    <div class="form-field"><label for="captain_name">Captain name <span>*</span></label><input id="captain_name" name="captain_name" type="text" maxlength="120" value="{{ form_data.captain_name }}" placeholder="e.g. Alex Morgan" required aria-invalid="{{ 'true' if errors.captain_name else 'false' }}">{% if errors.captain_name %}<small class="field-error">{{ errors.captain_name }}</small>{% endif %}</div>
+    <div class="form-field form-field-wide"><label for="logo_url">Team logo URL <small>(optional)</small></label><input id="logo_url" name="logo_url" type="url" maxlength="500" value="{{ form_data.logo_url }}" placeholder="https://example.com/team-logo.png" aria-invalid="{{ 'true' if errors.logo_url else 'false' }}">{% if errors.logo_url %}<small class="field-error">{{ errors.logo_url }}</small>{% endif %}</div>
+  </div></div>
+  <div class="form-section"><div class="form-section-heading"><span class="form-step">02</span><div><h2>Tournament association</h2><p>A team can use the same name in another tournament.</p></div></div><div class="form-field"><label for="tournament_id">Tournament <span>*</span></label><select id="tournament_id" name="tournament_id" required aria-invalid="{{ 'true' if errors.tournament_id else 'false' }}"><option value="">Select tournament</option>{% for tournament in tournaments %}<option value="{{ tournament.id }}" {% if form_data.tournament_id == tournament.id|string %}selected{% endif %}>{{ tournament.name }} · {{ tournament.sport }}</option>{% endfor %}</select>{% if errors.tournament_id %}<small class="field-error">{{ errors.tournament_id }}</small>{% endif %}</div></div>
+  <div class="form-actions"><a class="button button-secondary" href="{{ url_for('main.teams') }}">Cancel</a><button class="button button-primary" type="submit">{{ submit_label }} <span>→</span></button></div>
+</form></section>
+{% endblock %}

@@ -15,22 +15,16 @@ class TestConfig:
 
 def test_home_route_and_database_models():
     app = create_app(TestConfig)
-
     with app.test_client() as client:
         response = client.get("/")
         assert response.status_code == 200
         assert b"Tournament Matchup Generator" in response.data
         assert b"No tournaments yet" in response.data
-
     with app.app_context():
         tournament = Tournament(name="Spring Cup", sport="Football")
         team = Team(name="North Stars", tournament=tournament)
         player = Player(name="Alex Morgan", team=team, jersey_number=10)
-        match = Match(
-            tournament=tournament,
-            home_team=team,
-            round_name="Quarterfinal",
-        )
+        match = Match(tournament=tournament, home_team=team, round_name="Quarterfinal")
         db.session.add(tournament)
         db.session.commit()
         assert tournament.id is not None
@@ -45,34 +39,15 @@ def test_home_route_and_database_models():
 def test_dashboard_statistics_update_when_records_are_added():
     app = create_app(TestConfig)
     with app.app_context():
-        active = Tournament(
-            name="City League",
-            sport="Football",
-            status="active",
-            created_at=datetime(2026, 1, 10, tzinfo=timezone.utc),
-        )
-        completed = Tournament(
-            name="Summer Cup",
-            sport="Basketball",
-            status="completed",
-            created_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
-        )
-        db.session.add_all(
-            [
-                active,
-                completed,
-                Team(name="North Stars", tournament=active),
-                Team(name="South Stars", tournament=active),
-                Team(name="Court Kings", tournament=completed),
-            ]
-        )
+        active = Tournament(name="City League", sport="Football", status="active", created_at=datetime(2026, 1, 10, tzinfo=timezone.utc))
+        completed = Tournament(name="Summer Cup", sport="Basketball", status="completed", created_at=datetime(2026, 1, 11, tzinfo=timezone.utc))
+        db.session.add_all([active, completed, Team(name="North Stars", tournament=active), Team(name="South Stars", tournament=active), Team(name="Court Kings", tournament=completed)])
         db.session.commit()
     with app.test_client() as client:
         response = client.get("/")
         body = response.get_data(as_text=True)
         assert response.status_code == 200
-        assert "City League" in body
-        assert "Summer Cup" in body
+        assert "City League" in body and "Summer Cup" in body
         assert 'class="stat-value">2</strong>' in body
         assert 'class="stat-value">1</strong>' in body
         assert 'class="stat-value">3</strong>' in body
@@ -86,46 +61,28 @@ def test_dashboard_navigation_routes_are_functional_placeholders():
         for route in routes:
             response = client.get(route)
             assert response.status_code == 200
-            assert b"Coming soon" in response.data or b"Tournaments" in response.data
+            assert b"Coming soon" in response.data or b"Tournaments" in response.data or b"Registered teams" in response.data or b"Registered players" in response.data
 
 
 def test_create_tournament_persists_and_updates_dashboard():
     app = create_app(TestConfig)
-    form = {
-        "name": "Autumn Open",
-        "sport": "Tennis",
-        "venue": "Riverside Courts",
-        "tournament_date": "2026-10-18",
-        "description": "Open knockout event",
-        "status": "upcoming",
-    }
+    form = {"name": "Autumn Open", "sport": "Tennis", "venue": "Riverside Courts", "tournament_date": "2026-10-18", "description": "Open knockout event", "status": "upcoming"}
     with app.test_client() as client:
         response = client.post("/tournaments/new", data=form)
         assert response.status_code == 302
         tournament_id = response.headers["Location"].rsplit("/", 1)[-1]
         detail = client.get(f"/tournaments/{tournament_id}")
-        assert detail.status_code == 200
-        assert b"Riverside Courts" in detail.data
-        dashboard = client.get("/")
-        assert b"Autumn Open" in dashboard.data
-
+        assert detail.status_code == 200 and b"Riverside Courts" in detail.data
+        assert b"Autumn Open" in client.get("/").data
     with app.app_context():
         tournament = db.session.get(Tournament, int(tournament_id))
-        assert tournament is not None
-        assert tournament.tournament_date == date(2026, 10, 18)
+        assert tournament is not None and tournament.tournament_date == date(2026, 10, 18)
         assert tournament.status == "upcoming"
 
 
 def test_create_tournament_validates_missing_fields_and_invalid_date():
     app = create_app(TestConfig)
-    required_fields = {
-        "name": "",
-        "sport": "",
-        "venue": "",
-        "tournament_date": "not-a-date",
-        "description": "",
-        "status": "",
-    }
+    required_fields = {"name": "", "sport": "", "venue": "", "tournament_date": "not-a-date", "description": "", "status": ""}
     with app.test_client() as client:
         response = client.post("/tournaments/new", data=required_fields)
         body = response.get_data(as_text=True)
@@ -136,7 +93,6 @@ def test_create_tournament_validates_missing_fields_and_invalid_date():
         assert b"Enter a valid tournament date" in response.data
         assert b"Select a valid tournament status" in response.data
         assert "not-a-date" in body
-
     with app.app_context():
         assert db.session.query(Tournament).count() == 0
 
@@ -144,126 +100,191 @@ def test_create_tournament_validates_missing_fields_and_invalid_date():
 def test_edit_tournament_updates_sqlite_and_details_immediately():
     app = create_app(TestConfig)
     with app.app_context():
-        tournament = Tournament(
-            name="Old Name",
-            sport="Football",
-            venue="Old Venue",
-            tournament_date=date(2026, 2, 1),
-            description="Old description",
-            status="upcoming",
-        )
+        tournament = Tournament(name="Old Name", sport="Football", venue="Old Venue", tournament_date=date(2026, 2, 1), description="Old description", status="upcoming")
         db.session.add(tournament)
         db.session.commit()
         tournament_id = tournament.id
-
     with app.test_client() as client:
-        response = client.post(
-            f"/tournaments/{tournament_id}/edit",
-            data={
-                "name": "Updated Cup",
-                "sport": "Cricket",
-                "venue": "New Ground",
-                "tournament_date": "2026-03-02",
-                "description": "Updated description",
-                "status": "active",
-            },
-        )
+        response = client.post(f"/tournaments/{tournament_id}/edit", data={"name": "Updated Cup", "sport": "Cricket", "venue": "New Ground", "tournament_date": "2026-03-02", "description": "Updated description", "status": "active"})
         assert response.status_code == 302
         detail = client.get(f"/tournaments/{tournament_id}")
-        assert b"Updated Cup" in detail.data
-        assert b"New Ground" in detail.data
-        assert b"Updated description" in detail.data
-        assert b"Active" in detail.data
-
+        assert b"Updated Cup" in detail.data and b"New Ground" in detail.data and b"Updated description" in detail.data and b"Active" in detail.data
     with app.app_context():
         updated = db.session.get(Tournament, tournament_id)
-        assert updated.name == "Updated Cup"
-        assert updated.sport == "Cricket"
-        assert updated.status == "active"
-        assert updated.tournament_date == date(2026, 3, 2)
+        assert updated.name == "Updated Cup" and updated.sport == "Cricket" and updated.status == "active" and updated.tournament_date == date(2026, 3, 2)
 
 
 def test_tournament_listing_search_and_filters():
     app = create_app(TestConfig)
     with app.app_context():
-        db.session.add_all(
-            [
-                Tournament(name="Football Finals", sport="Football", venue="A", status="active"),
-                Tournament(name="Cricket Classic", sport="Cricket", venue="B", status="completed"),
-                Tournament(name="Football Juniors", sport="Football", venue="C", status="upcoming"),
-            ]
-        )
+        db.session.add_all([Tournament(name="Football Finals", sport="Football", venue="A", status="active"), Tournament(name="Cricket Classic", sport="Cricket", venue="B", status="completed"), Tournament(name="Football Juniors", sport="Football", venue="C", status="upcoming")])
         db.session.commit()
-
     with app.test_client() as client:
         response = client.get("/tournaments?search=final")
-        assert b"Football Finals" in response.data
-        assert b"Cricket Classic" not in response.data
+        assert b"Football Finals" in response.data and b"Cricket Classic" not in response.data
         response = client.get("/tournaments?sport=Football&status=upcoming")
-        assert b"Football Juniors" in response.data
-        assert b"Football Finals" not in response.data
-        assert b"Clear filters" in response.data
+        assert b"Football Juniors" in response.data and b"Football Finals" not in response.data and b"Clear filters" in response.data
         response = client.get("/tournaments?status=invalid")
-        assert b"Football Finals" in response.data
-        assert b"Cricket Classic" in response.data
+        assert b"Football Finals" in response.data and b"Cricket Classic" in response.data
 
 
 def test_tournament_delete_cascades_associated_records_and_updates_dashboard():
     app = create_app(TestConfig)
     with app.app_context():
-        tournament = Tournament(
-            name="Delete Cup",
-            sport="Basketball",
-            venue="Arena",
-            tournament_date=date(2026, 4, 4),
-            status="active",
-        )
+        tournament = Tournament(name="Delete Cup", sport="Basketball", venue="Arena", tournament_date=date(2026, 4, 4), status="active")
         team = Team(name="Delete Team", tournament=tournament)
         Player(name="Delete Player", team=team)
         Match(tournament=tournament, home_team=team, round_name="Final")
         db.session.add(tournament)
         db.session.commit()
         tournament_id, team_id = tournament.id, team.id
-
     with app.test_client() as client:
         response = client.post(f"/tournaments/{tournament_id}/delete")
-        assert response.status_code == 302
-        assert client.get(f"/tournaments/{tournament_id}").status_code == 404
+        assert response.status_code == 302 and client.get(f"/tournaments/{tournament_id}").status_code == 404
         assert b"Delete Cup" not in client.get("/").data
-
     with app.app_context():
-        assert db.session.get(Tournament, tournament_id) is None
-        assert db.session.get(Team, team_id) is None
-        assert db.session.query(Player).count() == 0
-        assert db.session.query(Match).count() == 0
+        assert db.session.get(Tournament, tournament_id) is None and db.session.get(Team, team_id) is None
+        assert db.session.query(Player).count() == 0 and db.session.query(Match).count() == 0
 
 
-def test_database_persists_after_application_restart(tmp_path):
-    database_path = tmp_path / "restart.db"
+def _create_tournament(name="League Cup"):
+    tournament = Tournament(name=name, sport="Football", venue="Main Ground", status="active")
+    db.session.add(tournament)
+    db.session.commit()
+    return tournament
 
+
+def _team_form(name="North Stars", tournament_id="1", captain="Alex Morgan"):
+    return {"name": name, "captain_name": captain, "logo_url": "https://example.com/logo.png", "tournament_id": tournament_id}
+
+
+def _player_form(name="Jordan Lee", team_id="1", jersey="10", position="Forward"):
+    return {"name": name, "team_id": team_id, "jersey_number": jersey, "position": position}
+
+
+def test_team_creation_duplicate_scope_and_relationship():
+    app = create_app(TestConfig)
+    with app.app_context():
+        first_tournament = _create_tournament("League Cup")
+        second_tournament = _create_tournament("Regional Cup")
+        first_id, second_id = first_tournament.id, second_tournament.id
+    with app.test_client() as client:
+        response = client.post("/teams/new", data=_team_form(tournament_id=str(first_id)))
+        assert response.status_code == 302
+        duplicate = client.post("/teams/new", data=_team_form(tournament_id=str(first_id)))
+        assert duplicate.status_code == 400
+        assert b"already exists" in duplicate.data
+        allowed_other_tournament = client.post("/teams/new", data=_team_form(tournament_id=str(second_id)))
+        assert allowed_other_tournament.status_code == 302
+    with app.app_context():
+        assert db.session.query(Team).count() == 2
+        assert db.session.get(Tournament, first_id).teams[0].name == "North Stars"
+
+
+def test_team_validation_and_editing():
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament = _create_tournament()
+        tournament_id = tournament.id
+    with app.test_client() as client:
+        invalid = client.post("/teams/new", data=_team_form(name="", tournament_id="999", captain=""))
+        assert invalid.status_code == 400
+        assert b"Team name is required" in invalid.data and b"Captain name is required" in invalid.data
+        team_response = client.post("/teams/new", data=_team_form(tournament_id=str(tournament_id)))
+        team_id = int(team_response.headers["Location"].rsplit("/", 1)[-1])
+        edited = client.post(f"/teams/{team_id}/edit", data=_team_form(name="Updated Stars", tournament_id=str(tournament_id), captain="New Captain"))
+        assert edited.status_code == 302
+        assert b"Updated Stars" in client.get(f"/teams/{team_id}").data
+    with app.app_context():
+        team = db.session.get(Team, team_id)
+        assert team.name == "Updated Stars" and team.captain_name == "New Captain"
+
+
+def test_player_creation_duplicate_jersey_editing_and_relationship():
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament = _create_tournament()
+        team = Team(name="Player Team", captain_name="Captain", tournament=tournament)
+        db.session.add(team)
+        db.session.commit()
+        team_id = team.id
+    with app.test_client() as client:
+        created = client.post("/players/new", data=_player_form(team_id=str(team_id)))
+        assert created.status_code == 302
+        player_id = int(created.headers["Location"].rsplit("/", 1)[-1])
+        duplicate = client.post("/players/new", data=_player_form(name="Other Player", team_id=str(team_id)))
+        assert duplicate.status_code == 400 and b"already used" in duplicate.data
+        edited = client.post(f"/players/{player_id}/edit", data=_player_form(name="Updated Player", team_id=str(team_id), jersey="11", position="Captain"))
+        assert edited.status_code == 302
+        assert b"Updated Player" in client.get(f"/players/{player_id}").data
+    with app.app_context():
+        player = db.session.get(Player, player_id)
+        assert player.name == "Updated Player" and player.jersey_number == 11 and player.position == "Captain"
+        assert player.team.name == "Player Team"
+
+
+def test_player_validation_and_deletion_cascade():
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament = _create_tournament()
+        team = Team(name="Roster Team", captain_name="Captain", tournament=tournament)
+        db.session.add(team)
+        db.session.commit()
+        team_id = team.id
+    with app.test_client() as client:
+        invalid = client.post("/players/new", data=_player_form(name="", team_id="999", jersey="not-number"))
+        assert invalid.status_code == 400
+        assert b"Player name is required" in invalid.data and b"Select an existing team" in invalid.data
+        created = client.post("/players/new", data=_player_form(team_id=str(team_id)))
+        player_id = int(created.headers["Location"].rsplit("/", 1)[-1])
+        deleted = client.post(f"/players/{player_id}/delete")
+        assert deleted.status_code == 302
+        assert client.get(f"/players/{player_id}").status_code == 404
+    with app.app_context():
+        assert db.session.get(Player, player_id) is None
+        assert db.session.get(Team, team_id) is not None
+
+
+def test_team_deletion_removes_players_and_clears_match_references():
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament = _create_tournament()
+        team = Team(name="Match Team", captain_name="Captain", tournament=tournament)
+        opponent = Team(name="Opponent", captain_name="Captain", tournament=tournament)
+        player = Player(name="Roster Player", team=team)
+        match = Match(tournament=tournament, home_team=team, away_team=opponent, winner=team)
+        db.session.add_all([team, opponent, player, match])
+        db.session.commit()
+        team_id, player_id, match_id = team.id, player.id, match.id
+    with app.test_client() as client:
+        response = client.post(f"/teams/{team_id}/delete")
+        assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(Team, team_id) is None and db.session.get(Player, player_id) is None
+        remaining_match = db.session.get(Match, match_id)
+        assert remaining_match is not None
+        assert remaining_match.home_team_id is None and remaining_match.winner_id is None
+        assert remaining_match.away_team_id is not None
+
+
+def test_team_and_player_database_persistence_after_restart(tmp_path):
+    database_path = tmp_path / "team-player-restart.db"
     class FileConfig(TestConfig):
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{database_path}"
-
     app = create_app(FileConfig)
+    with app.app_context():
+        tournament = _create_tournament("Persistent Tournament")
+        team = Team(name="Persistent Team", captain_name="Persisted Captain", tournament=tournament)
+        db.session.add(team)
+        db.session.commit()
+        team_id = team.id
     with app.test_client() as client:
-        response = client.post(
-            "/tournaments/new",
-            data={
-                "name": "Persistent Cup",
-                "sport": "Volleyball",
-                "venue": "Community Hall",
-                "tournament_date": "2026-05-05",
-                "description": "Persisted record",
-                "status": "completed",
-            },
-        )
+        response = client.post("/players/new", data=_player_form(name="Persistent Player", team_id=str(team_id), jersey="7"))
         assert response.status_code == 302
-
     restarted_app = create_app(FileConfig)
     with restarted_app.test_client() as client:
-        response = client.get("/tournaments?search=Persistent")
-        assert response.status_code == 200
-        assert b"Persistent Cup" in response.data
+        assert b"Persistent Team" in client.get("/teams?search=Persistent").data
+        assert b"Persistent Player" in client.get("/players?search=Persistent").data
 
 
 def test_database_file_location_is_project_instance_directory():

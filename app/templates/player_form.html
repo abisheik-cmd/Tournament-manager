@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading compact-heading"><div><p class="eyebrow">{{ eyebrow }}</p><h1>{{ heading }}</h1><p class="page-subtitle">Keep player records organized under their team.</p></div><a class="button button-secondary" href="{{ url_for('main.players') }}">← Back to players</a></section>
+<section class="panel form-panel"><form method="post" class="tournament-form" novalidate>
+  {% if errors.form %}<div class="notice notice-error" role="alert">{{ errors.form }}</div>{% endif %}
+  <div class="form-section"><div class="form-section-heading"><span class="form-step">01</span><div><h2>Player information</h2><p>Required: player name and team.</p></div></div><div class="form-grid">
+    <div class="form-field"><label for="name">Player name <span>*</span></label><input id="name" name="name" type="text" maxlength="120" value="{{ form_data.name }}" placeholder="e.g. Jordan Lee" required aria-invalid="{{ 'true' if errors.name else 'false' }}">{% if errors.name %}<small class="field-error">{{ errors.name }}</small>{% endif %}</div>
+    <div class="form-field"><label for="team_id">Team <span>*</span></label><select id="team_id" name="team_id" required aria-invalid="{{ 'true' if errors.team_id else 'false' }}"><option value="">Select team</option>{% for team in teams %}<option value="{{ team.id }}" {% if form_data.team_id == team.id|string %}selected{% endif %}>{{ team.name }} · {{ team.tournament.name }}</option>{% endfor %}</select>{% if errors.team_id %}<small class="field-error">{{ errors.team_id }}</small>{% endif %}</div>
+    <div class="form-field"><label for="jersey_number">Jersey number <small>(optional)</small></label><input id="jersey_number" name="jersey_number" type="number" min="0" step="1" value="{{ form_data.jersey_number }}" placeholder="e.g. 10" aria-invalid="{{ 'true' if errors.jersey_number else 'false' }}">{% if errors.jersey_number %}<small class="field-error">{{ errors.jersey_number }}</small>{% endif %}</div>
+    <div class="form-field"><label for="position">Position or role <small>(optional)</small></label><input id="position" name="position" type="text" maxlength="80" value="{{ form_data.position }}" placeholder="e.g. Forward"></div>
+  </div></div>
+  <div class="form-actions"><a class="button button-secondary" href="{{ url_for('main.players') }}">Cancel</a><button class="button button-primary" type="submit">{{ submit_label }} <span>→</span></button></div>
+</form></section>
+{% endblock %}

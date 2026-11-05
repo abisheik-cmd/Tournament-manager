@@ -4,14 +4,13 @@ from datetime import date, datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .extensions import db
-from .models import Team, Tournament
+from .models import Match, Player, Team, Tournament
 
 
 main_bp = Blueprint("main", __name__)
-
 SPORTS = (
     "Football",
     "Cricket",
@@ -138,11 +137,7 @@ def edit_tournament(tournament_id):
     """Edit an existing tournament and persist the changes."""
 
     tournament = db.get_or_404(Tournament, tournament_id)
-    if request.method == "GET":
-        form_data = _tournament_form_data(tournament)
-    else:
-        form_data = _form_data()
-
+    form_data = _tournament_form_data(tournament) if request.method == "GET" else _form_data()
     errors = {}
     if request.method == "POST":
         errors, cleaned_data = _validate_tournament_form(form_data)
@@ -185,7 +180,6 @@ def delete_tournament(tournament_id):
         db.session.rollback()
         flash("The tournament could not be deleted. No changes were made.", "error")
         return redirect(url_for("main.tournament_detail", tournament_id=tournament_id))
-
     flash(f"{tournament_name} and its associated records were deleted.", "success")
     return redirect(url_for("main.tournaments"))
 
@@ -200,18 +194,267 @@ def tournament_detail(tournament_id):
     )
 
 
-@main_bp.get("/teams")
+@main_bp.route("/teams", methods=["GET"])
 def teams():
-    """Placeholder for team management."""
+    """List teams with optional name and tournament filters."""
 
-    return _placeholder_page("Teams", "Team management will be introduced in a later module.")
+    search = request.args.get("search", "").strip()
+    tournament_id_value = request.args.get("tournament_id", "").strip()
+    query = Team.query.join(Tournament)
+    if search:
+        query = query.filter(Team.name.ilike(f"%{search}%"))
+    try:
+        tournament_id = int(tournament_id_value) if tournament_id_value else None
+    except ValueError:
+        tournament_id = None
+        tournament_id_value = ""
+    if tournament_id:
+        query = query.filter(Team.tournament_id == tournament_id)
+    else:
+        tournament_id_value = ""
+
+    return render_template(
+        "teams.html",
+        title="Teams",
+        teams=query.order_by(Team.name.asc()).all(),
+        tournaments=Tournament.query.order_by(Tournament.name.asc()).all(),
+        filters={"search": search, "tournament_id": tournament_id_value},
+    )
 
 
-@main_bp.get("/players")
+@main_bp.route("/teams/new", methods=["GET", "POST"])
+def new_team():
+    """Register a team in an existing tournament."""
+
+    form_data = _team_form_data()
+    if request.method == "GET" and request.args.get("tournament_id"):
+        form_data["tournament_id"] = request.args.get("tournament_id", "")
+    errors = {}
+    if request.method == "POST":
+        errors, cleaned_data = _validate_team_form(form_data)
+        if not errors:
+            team = Team(**cleaned_data)
+            try:
+                db.session.add(team)
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                errors["name"] = "A team with this name already exists in the selected tournament."
+            except SQLAlchemyError:
+                db.session.rollback()
+                errors["form"] = "The team could not be saved. Please try again."
+            else:
+                flash(f"{team.name} was registered successfully.", "success")
+                return redirect(url_for("main.team_detail", team_id=team.id))
+
+    return render_template(
+        "team_form.html",
+        title="Register Team",
+        heading="Register team",
+        eyebrow="Team management",
+        form_data=form_data,
+        errors=errors,
+        tournaments=Tournament.query.order_by(Tournament.name.asc()).all(),
+        submit_label="Register team",
+    ), 400 if errors else 200
+
+
+@main_bp.route("/teams/<int:team_id>/edit", methods=["GET", "POST"])
+def edit_team(team_id):
+    """Edit team details and persist changes."""
+
+    team = db.get_or_404(Team, team_id)
+    form_data = _team_form_data(team) if request.method == "GET" else _team_form_data()
+    errors = {}
+    if request.method == "POST":
+        errors, cleaned_data = _validate_team_form(form_data, current_team=team)
+        if not errors:
+            for field, value in cleaned_data.items():
+                setattr(team, field, value)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                errors["name"] = "A team with this name already exists in the selected tournament."
+            except SQLAlchemyError:
+                db.session.rollback()
+                errors["form"] = "The team could not be updated. Please try again."
+            else:
+                flash(f"{team.name} was updated successfully.", "success")
+                return redirect(url_for("main.team_detail", team_id=team.id))
+
+    return render_template(
+        "team_form.html",
+        title="Edit Team",
+        heading="Edit team",
+        eyebrow="Team management",
+        form_data=form_data,
+        errors=errors,
+        tournaments=Tournament.query.order_by(Tournament.name.asc()).all(),
+        submit_label="Save changes",
+        team=team,
+    ), 400 if errors else 200
+
+
+@main_bp.post("/teams/<int:team_id>/delete")
+def delete_team(team_id):
+    """Delete a team and its players while preserving fixtures without orphaned team references."""
+
+    team = db.get_or_404(Team, team_id)
+    team_name = team.name
+    try:
+        for match in team.home_matches:
+            match.home_team_id = None
+        for match in team.away_matches:
+            match.away_team_id = None
+        db.session.query(Match).filter(Match.winner_id == team.id).update(
+            {Match.winner_id: None}, synchronize_session=False
+        )
+        db.session.delete(team)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("The team could not be deleted. No changes were made.", "error")
+        return redirect(url_for("main.team_detail", team_id=team_id))
+
+    flash(f"{team_name} and its players were deleted.", "success")
+    return redirect(url_for("main.teams"))
+
+
+@main_bp.get("/teams/<int:team_id>")
+def team_detail(team_id):
+    """Show a team, its tournament, captain, and registered players."""
+
+    team = db.get_or_404(Team, team_id)
+    return render_template("team_detail.html", title=team.name, team=team)
+
+
+@main_bp.route("/players", methods=["GET"])
 def players():
-    """Placeholder for player management."""
+    """List players with optional name and team filters."""
 
-    return _placeholder_page("Players", "Player management will be introduced in a later module.")
+    search = request.args.get("search", "").strip()
+    team_id_value = request.args.get("team_id", "").strip()
+    query = Player.query.join(Team).join(Tournament)
+    if search:
+        query = query.filter(Player.name.ilike(f"%{search}%"))
+    try:
+        team_id = int(team_id_value) if team_id_value else None
+    except ValueError:
+        team_id = None
+        team_id_value = ""
+    if team_id:
+        query = query.filter(Player.team_id == team_id)
+    else:
+        team_id_value = ""
+
+    return render_template(
+        "players.html",
+        title="Players",
+        players=query.order_by(Player.name.asc()).all(),
+        teams=Team.query.join(Tournament).order_by(Team.name.asc()).all(),
+        filters={"search": search, "team_id": team_id_value},
+    )
+
+
+@main_bp.route("/players/new", methods=["GET", "POST"])
+def new_player():
+    """Register a player under an existing team."""
+
+    form_data = _player_form_data()
+    if request.method == "GET" and request.args.get("team_id"):
+        form_data["team_id"] = request.args.get("team_id", "")
+    errors = {}
+    if request.method == "POST":
+        errors, cleaned_data = _validate_player_form(form_data)
+        if not errors:
+            player = Player(**cleaned_data)
+            try:
+                db.session.add(player)
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                errors["jersey_number"] = "That jersey number is already used by this team."
+            except SQLAlchemyError:
+                db.session.rollback()
+                errors["form"] = "The player could not be saved. Please try again."
+            else:
+                flash(f"{player.name} was registered successfully.", "success")
+                return redirect(url_for("main.player_detail", player_id=player.id))
+
+    return render_template(
+        "player_form.html",
+        title="Register Player",
+        heading="Register player",
+        eyebrow="Player management",
+        form_data=form_data,
+        errors=errors,
+        teams=Team.query.join(Tournament).order_by(Team.name.asc()).all(),
+        submit_label="Register player",
+    ), 400 if errors else 200
+
+
+@main_bp.route("/players/<int:player_id>/edit", methods=["GET", "POST"])
+def edit_player(player_id):
+    """Edit player details and persist changes."""
+
+    player = db.get_or_404(Player, player_id)
+    form_data = _player_form_data(player) if request.method == "GET" else _player_form_data()
+    errors = {}
+    if request.method == "POST":
+        errors, cleaned_data = _validate_player_form(form_data, current_player=player)
+        if not errors:
+            for field, value in cleaned_data.items():
+                setattr(player, field, value)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                errors["jersey_number"] = "That jersey number is already used by this team."
+            except SQLAlchemyError:
+                db.session.rollback()
+                errors["form"] = "The player could not be updated. Please try again."
+            else:
+                flash(f"{player.name} was updated successfully.", "success")
+                return redirect(url_for("main.player_detail", player_id=player.id))
+
+    return render_template(
+        "player_form.html",
+        title="Edit Player",
+        heading="Edit player",
+        eyebrow="Player management",
+        form_data=form_data,
+        errors=errors,
+        teams=Team.query.join(Tournament).order_by(Team.name.asc()).all(),
+        submit_label="Save changes",
+        player=player,
+    ), 400 if errors else 200
+
+
+@main_bp.post("/players/<int:player_id>/delete")
+def delete_player(player_id):
+    """Delete one player transactionally."""
+
+    player = db.get_or_404(Player, player_id)
+    player_name = player.name
+    try:
+        db.session.delete(player)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("The player could not be deleted. No changes were made.", "error")
+        return redirect(url_for("main.player_detail", player_id=player_id))
+
+    flash(f"{player_name} was deleted.", "success")
+    return redirect(url_for("main.players"))
+
+
+@main_bp.get("/players/<int:player_id>")
+def player_detail(player_id):
+    """Show one player's profile and associated team."""
+
+    player = db.get_or_404(Player, player_id)
+    return render_template("player_detail.html", title=player.name, player=player)
 
 
 @main_bp.get("/matches")
@@ -231,7 +474,7 @@ def settings():
 
 
 def _form_data():
-    """Return normalized form values for rendering and validation."""
+    """Return normalized tournament form values for rendering and validation."""
 
     return {
         "name": request.form.get("name", "").strip(),
@@ -244,7 +487,7 @@ def _form_data():
 
 
 def _tournament_form_data(tournament):
-    """Convert a model into the values expected by the HTML form."""
+    """Convert a tournament model into form values."""
 
     return {
         "name": tournament.name or "",
@@ -259,7 +502,7 @@ def _tournament_form_data(tournament):
 
 
 def _validate_tournament_form(form_data):
-    """Validate required fields and convert the date to a Python date."""
+    """Validate required tournament fields and convert the date."""
 
     errors = {}
     if not form_data["name"]:
@@ -272,16 +515,15 @@ def _validate_tournament_form(form_data):
         errors["tournament_date"] = "Tournament date is required."
     else:
         try:
-            tournament_date = datetime.strptime(
+            form_data["tournament_date"] = datetime.strptime(
                 form_data["tournament_date"], "%Y-%m-%d"
             ).date()
-            form_data["tournament_date"] = tournament_date
         except ValueError:
             errors["tournament_date"] = "Enter a valid tournament date."
     if form_data["status"] not in STATUSES:
         errors["status"] = "Select a valid tournament status."
 
-    cleaned_data = {
+    return errors, {
         "name": form_data["name"],
         "sport": form_data["sport"],
         "venue": form_data["venue"],
@@ -291,7 +533,120 @@ def _validate_tournament_form(form_data):
         "description": form_data["description"],
         "status": form_data["status"],
     }
-    return errors, cleaned_data
+
+
+def _team_form_data(team=None):
+    """Return normalized team form values."""
+
+    if team is not None:
+        return {
+            "name": team.name or "",
+            "captain_name": team.captain_name or "",
+            "logo_url": team.logo_url or "",
+            "tournament_id": str(team.tournament_id),
+        }
+    return {
+        "name": request.form.get("name", "").strip(),
+        "captain_name": request.form.get("captain_name", "").strip(),
+        "logo_url": request.form.get("logo_url", "").strip(),
+        "tournament_id": request.form.get("tournament_id", "").strip(),
+    }
+
+
+def _validate_team_form(form_data, current_team=None):
+    """Validate team fields and enforce name uniqueness within a tournament."""
+
+    errors = {}
+    if not form_data["name"]:
+        errors["name"] = "Team name is required."
+    if not form_data["captain_name"]:
+        errors["captain_name"] = "Captain name is required."
+    try:
+        tournament_id = int(form_data["tournament_id"])
+    except (TypeError, ValueError):
+        tournament_id = None
+        errors["tournament_id"] = "Select an existing tournament."
+    if tournament_id is not None and db.session.get(Tournament, tournament_id) is None:
+        errors["tournament_id"] = "Select an existing tournament."
+
+    if tournament_id is not None and form_data["name"]:
+        duplicate_query = Team.query.filter(
+            Team.tournament_id == tournament_id,
+            func.lower(Team.name) == form_data["name"].lower(),
+        )
+        if current_team is not None:
+            duplicate_query = duplicate_query.filter(Team.id != current_team.id)
+        if duplicate_query.first() is not None:
+            errors["name"] = "A team with this name already exists in the selected tournament."
+
+    if form_data["logo_url"] and len(form_data["logo_url"]) > 500:
+        errors["logo_url"] = "Logo URL must be 500 characters or fewer."
+
+    return errors, {
+        "name": form_data["name"],
+        "captain_name": form_data["captain_name"],
+        "logo_url": form_data["logo_url"] or None,
+        "tournament_id": tournament_id,
+    }
+
+
+def _player_form_data(player=None):
+    """Return normalized player form values."""
+
+    if player is not None:
+        return {
+            "name": player.name or "",
+            "jersey_number": str(player.jersey_number) if player.jersey_number is not None else "",
+            "position": player.position or "",
+            "team_id": str(player.team_id),
+        }
+    return {
+        "name": request.form.get("name", "").strip(),
+        "jersey_number": request.form.get("jersey_number", "").strip(),
+        "position": request.form.get("position", "").strip(),
+        "team_id": request.form.get("team_id", "").strip(),
+    }
+
+
+def _validate_player_form(form_data, current_player=None):
+    """Validate player fields and enforce jersey uniqueness within a team."""
+
+    errors = {}
+    if not form_data["name"]:
+        errors["name"] = "Player name is required."
+    try:
+        team_id = int(form_data["team_id"])
+    except (TypeError, ValueError):
+        team_id = None
+        errors["team_id"] = "Select an existing team."
+    if team_id is not None and db.session.get(Team, team_id) is None:
+        errors["team_id"] = "Select an existing team."
+
+    jersey_number = None
+    if form_data["jersey_number"]:
+        try:
+            jersey_number = int(form_data["jersey_number"])
+            if jersey_number < 0:
+                raise ValueError
+        except ValueError:
+            errors["jersey_number"] = "Jersey number must be a whole number of 0 or greater."
+
+    if team_id is not None and jersey_number is not None:
+        duplicate_query = Player.query.filter(
+            Player.team_id == team_id,
+            Player.jersey_number == jersey_number,
+        )
+        if current_player is not None:
+            duplicate_query = duplicate_query.filter(Player.id != current_player.id)
+        if duplicate_query.first() is not None:
+            errors["jersey_number"] = "That jersey number is already used by this team."
+
+    return errors, {
+        "name": form_data["name"],
+        "jersey_number": jersey_number,
+        "position": form_data["position"] or None,
+        "team_id": team_id,
+    }
 
 
 def _placeholder_page(title, description):
