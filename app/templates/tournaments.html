@@ -2,14 +2,24 @@
 
 {% block content %}
 <section class="page-heading compact-heading">
-  <div><p class="eyebrow">Competition library</p><h1>Tournaments</h1><p class="page-subtitle">Browse the competitions registered in your system.</p></div>
+  <div><p class="eyebrow">Competition library</p><h1>Tournaments</h1><p class="page-subtitle">Create, review, and maintain every competition in one place.</p></div>
   <a class="button button-primary" href="{{ url_for('main.new_tournament') }}"><span>＋</span> Create tournament</a>
 </section>
+<section class="panel filters-panel">
+  <form class="filters-form" method="get" action="{{ url_for('main.tournaments') }}">
+    <div class="filter-field filter-search"><label for="search">Search tournaments</label><input id="search" name="search" type="search" value="{{ filters.search }}" placeholder="Search by tournament name"></div>
+    <div class="filter-field"><label for="filter-sport">Sport</label><select id="filter-sport" name="sport"><option value="">All sports</option>{% for sport in sports %}<option value="{{ sport }}" {% if filters.sport == sport %}selected{% endif %}>{{ sport }}</option>{% endfor %}</select></div>
+    <div class="filter-field"><label for="filter-status">Status</label><select id="filter-status" name="status"><option value="">All statuses</option>{% for value, label in statuses.items() %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <button class="button button-primary filter-submit" type="submit">Apply filters</button>
+    <a class="clear-filters" href="{{ url_for('main.tournaments') }}">Clear filters</a>
+  </form>
+</section>
 <section class="panel page-panel">
+  <div class="panel-heading"><div><p class="section-kicker">{{ tournaments|length }} result{% if tournaments|length != 1 %}s{% endif %}</p><h2>All tournaments</h2></div></div>
   {% if tournaments %}
-    <div class="table-wrap"><table><thead><tr><th>Tournament</th><th>Sport</th><th>Date</th><th>Teams</th><th>Status</th><th></th></tr></thead><tbody>
-    {% for tournament in tournaments %}<tr><td><div class="tournament-name"><span class="table-avatar">{{ tournament.name[:1]|upper }}</span><strong>{{ tournament.name }}</strong></div></td><td>{{ tournament.sport }}</td><td>{{ tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—' }}</td><td>{{ tournament.teams|length }}</td><td><span class="badge badge-{{ tournament.status|lower }}">{{ tournament.status|capitalize }}</span></td><td><a class="row-action" href="{{ url_for('main.tournament_detail', tournament_id=tournament.id) }}">View <span>→</span></a></td></tr>{% endfor %}
+    <div class="table-wrap"><table><thead><tr><th>Tournament</th><th>Sport</th><th>Venue</th><th>Date</th><th>Teams</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+    {% for tournament in tournaments %}<tr><td><div class="tournament-name"><span class="table-avatar">{{ tournament.name[:1]|upper }}</span><strong>{{ tournament.name }}</strong></div></td><td>{{ tournament.sport }}</td><td>{{ tournament.venue or '—' }}</td><td>{{ tournament.tournament_date.strftime('%d %b %Y') if tournament.tournament_date else (tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—') }}</td><td>{{ tournament.teams|length }}</td><td><span class="badge badge-{{ tournament.status|lower }}">{{ statuses.get(tournament.status, tournament.status|capitalize) }}</span></td><td><div class="action-links"><a class="row-action" href="{{ url_for('main.tournament_detail', tournament_id=tournament.id) }}">View</a><a class="row-action" href="{{ url_for('main.edit_tournament', tournament_id=tournament.id) }}">Edit</a></div></td></tr>{% endfor %}
     </tbody></table></div>
-  {% else %}<div class="empty-state"><span class="empty-icon">◫</span><h3>Your tournament library is empty</h3><p>Once you create a tournament, it will be listed here.</p><a class="button button-secondary" href="{{ url_for('main.new_tournament') }}">Create tournament</a></div>{% endif %}
+  {% else %}<div class="empty-state"><span class="empty-icon">◫</span><h3>{% if filters.search or filters.sport or filters.status %}No matching tournaments{% else %}Your tournament library is empty{% endif %}</h3><p>{% if filters.search or filters.sport or filters.status %}Try a different search or clear the filters.{% else %}Once you create a tournament, it will be listed here.{% endif %}</p>{% if filters.search or filters.sport or filters.status %}<a class="button button-secondary" href="{{ url_for('main.tournaments') }}">Clear filters</a>{% else %}<a class="button button-secondary" href="{{ url_for('main.new_tournament') }}">Create tournament</a>{% endif %}</div>{% endif %}
 </section>
 {% endblock %}

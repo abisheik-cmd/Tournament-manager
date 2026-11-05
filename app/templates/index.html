@@ -52,7 +52,7 @@
             <tr>
               <td><div class="tournament-name"><span class="table-avatar">{{ tournament.name[:1]|upper }}</span><strong>{{ tournament.name }}</strong></div></td>
               <td>{{ tournament.sport }}</td>
-              <td>{{ tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—' }}</td>
+              <td>{{ tournament.tournament_date.strftime('%d %b %Y') if tournament.tournament_date else (tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—') }}</td>
               <td>{{ tournament.teams|length }}</td>
               <td><span class="badge badge-{{ tournament.status|lower }}">{{ tournament.status|capitalize }}</span></td>
               <td><a class="row-action" href="{{ url_for('main.tournament_detail', tournament_id=tournament.id) }}" aria-label="View {{ tournament.name }}">View <span>→</span></a></td>

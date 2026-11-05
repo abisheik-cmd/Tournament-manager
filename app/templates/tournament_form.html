@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><p class="eyebrow">{{ eyebrow }}</p><h1>{{ heading }}</h1><p class="page-subtitle">Capture the essentials for this competition.</p></div>
+  <a class="button button-secondary" href="{{ url_for('main.tournaments') }}">← Back to tournaments</a>
+</section>
+<section class="panel form-panel">
+  {% if errors.form %}<div class="notice notice-error" role="alert">{{ errors.form }}</div>{% endif %}
+  <form method="post" class="tournament-form" novalidate>
+    <div class="form-section"><div class="form-section-heading"><span class="form-step">01</span><div><h2>Competition details</h2><p>Give your tournament a clear identity.</p></div></div>
+      <div class="form-grid">
+        <div class="form-field form-field-wide"><label for="name">Tournament name <span>*</span></label><input id="name" name="name" type="text" maxlength="120" value="{{ form_data.name }}" placeholder="e.g. City Summer Cup" required aria-invalid="{{ 'true' if errors.name else 'false' }}">{% if errors.name %}<small class="field-error">{{ errors.name }}</small>{% endif %}</div>
+        <div class="form-field"><label for="sport">Sport <span>*</span></label><select id="sport" name="sport" required aria-invalid="{{ 'true' if errors.sport else 'false' }}"><option value="">Select sport</option>{% for sport in sports %}<option value="{{ sport }}" {% if form_data.sport == sport %}selected{% endif %}>{{ sport }}</option>{% endfor %}</select>{% if errors.sport %}<small class="field-error">{{ errors.sport }}</small>{% endif %}</div>
+        <div class="form-field"><label for="status">Status <span>*</span></label><select id="status" name="status" required aria-invalid="{{ 'true' if errors.status else 'false' }}"><option value="">Select status</option>{% for value, label in statuses.items() %}<option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% if errors.status %}<small class="field-error">{{ errors.status }}</small>{% endif %}</div>
+      </div>
+    </div>
+    <div class="form-section"><div class="form-section-heading"><span class="form-step">02</span><div><h2>Schedule and venue</h2><p>Tell participants where and when to play.</p></div></div>
+      <div class="form-grid"><div class="form-field"><label for="venue">Venue <span>*</span></label><input id="venue" name="venue" type="text" maxlength="160" value="{{ form_data.venue }}" placeholder="e.g. Central Sports Complex" required aria-invalid="{{ 'true' if errors.venue else 'false' }}">{% if errors.venue %}<small class="field-error">{{ errors.venue }}</small>{% endif %}</div><div class="form-field"><label for="tournament_date">Tournament date <span>*</span></label><input id="tournament_date" name="tournament_date" type="date" value="{{ form_data.tournament_date if form_data.tournament_date is string else form_data.tournament_date.isoformat() }}" required aria-invalid="{{ 'true' if errors.tournament_date else 'false' }}">{% if errors.tournament_date %}<small class="field-error">{{ errors.tournament_date }}</small>{% endif %}</div></div>
+    </div>
+    <div class="form-section"><div class="form-section-heading"><span class="form-step">03</span><div><h2>About the tournament</h2><p>Add optional context for organizers and participants.</p></div></div><div class="form-field"><label for="description">Description <small>(optional)</small></label><textarea id="description" name="description" rows="5" maxlength="2000" placeholder="Add rules, eligibility notes, or other useful details.">{{ form_data.description }}</textarea></div></div>
+    <div class="form-actions"><a class="button button-secondary" href="{{ url_for('main.tournaments') }}">Cancel</a><button class="button button-primary" type="submit">{{ submit_label }} <span>→</span></button></div>
+  </form>
+</section>
+{% endblock %}

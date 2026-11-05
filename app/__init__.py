@@ -12,15 +12,26 @@ def _ensure_schema_compatibility():
     """Apply small additive upgrades to an existing SQLite database."""
 
     inspector = inspect(db.engine)
-    tournament_columns = {column["name"] for column in inspector.get_columns("tournaments")}
-    if "status" not in tournament_columns:
+    tournament_columns = {
+        column["name"] for column in inspector.get_columns("tournaments")
+    }
+    additions = {
+        "status": "VARCHAR(20) NOT NULL DEFAULT 'active'",
+        "venue": "VARCHAR(160)",
+        "tournament_date": "DATE",
+        "description": "TEXT",
+    }
+    missing_columns = [
+        (name, definition)
+        for name, definition in additions.items()
+        if name not in tournament_columns
+    ]
+    if missing_columns:
         with db.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "ALTER TABLE tournaments "
-                    "ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active'"
+            for name, definition in missing_columns:
+                connection.execute(
+                    text(f"ALTER TABLE tournaments ADD COLUMN {name} {definition}")
                 )
-            )
 
 
 def create_app(config_class=Config):
