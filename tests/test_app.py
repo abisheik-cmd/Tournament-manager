@@ -292,3 +292,148 @@ def test_database_file_location_is_project_instance_directory():
     database_uri = app.config["SQLALCHEMY_DATABASE_URI"]
     assert database_uri.startswith("sqlite:///")
     assert Path(database_uri.removeprefix("sqlite:///" )).parent.name == "instance"
+
+
+import random
+
+import pytest
+
+from app.fixture_engine import generate_knockout_bracket, next_power_of_two
+
+
+def _fixture_tournament(team_count, name="Fixture Cup"):
+    tournament = Tournament(
+        name=name,
+        sport="Football",
+        venue="Bracket Arena",
+        status="active",
+    )
+    db.session.add(tournament)
+    db.session.flush()
+    teams = [
+        Team(
+            name=f"Fixture Team {index}",
+            captain_name=f"Captain {index}",
+            tournament=tournament,
+        )
+        for index in range(team_count)
+    ]
+    db.session.add_all(teams)
+    db.session.flush()
+    return tournament, teams
+
+
+@pytest.mark.parametrize("team_count", [2, 3, 4, 5, 6, 7, 8, 10, 16, 32, 64])
+def test_fixture_engine_generates_valid_bracket_for_every_supported_team_count(team_count):
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament, teams = _fixture_tournament(team_count, name=f"Fixture {team_count}")
+        matches = generate_knockout_bracket(
+            tournament, teams, rng=random.Random(team_count)
+        )
+        db.session.commit()
+        bracket_size = next_power_of_two(team_count)
+        first_round = [match for match in matches if match.round_number == 1]
+        max_round = max(match.round_number for match in matches)
+        assert len(matches) == bracket_size - 1
+        assert len(first_round) == bracket_size // 2
+        assert sum(match.is_bye for match in first_round) == bracket_size - team_count
+        if bracket_size - team_count >= 2:
+            half = len(first_round) // 2
+            assert any(match.is_bye for match in first_round[:half])
+            assert any(match.is_bye for match in first_round[half:])
+        first_round_teams = [
+            team_id
+            for match in first_round
+            for team_id in (match.home_team_id, match.away_team_id)
+            if team_id is not None
+        ]
+        assert sorted(first_round_teams) == sorted(team.id for team in teams)
+        assert len(first_round_teams) == len(set(first_round_teams)) == team_count
+        assert all(match.home_team_id != match.away_team_id for match in first_round)
+        assert all(
+            match.next_match_id is not None
+            for match in matches
+            if match.round_number < max_round
+        )
+        for match in first_round:
+            if match.is_bye:
+                assert match.away_team_id is None
+                assert match.winner_id == match.home_team_id
+                assert match.status == "bye"
+
+
+def test_fixture_generation_route_requires_eligibility_and_prevents_duplicates():
+    app = create_app(TestConfig)
+    with app.app_context():
+        small_tournament, _ = _fixture_tournament(1, name="Too Small")
+        valid_tournament, _ = _fixture_tournament(3, name="Valid Bracket")
+        small_id, valid_id = small_tournament.id, valid_tournament.id
+        db.session.commit()
+
+    with app.test_client() as client:
+        too_small = client.post(
+            "/matches/generate",
+            data={"tournament_id": str(small_id)},
+            follow_redirects=True,
+        )
+        assert too_small.status_code == 200
+        assert b"At least 2 registered teams" in too_small.data
+        generated = client.post(
+            "/matches/generate",
+            data={"tournament_id": str(valid_id)},
+            follow_redirects=True,
+        )
+        assert generated.status_code == 200
+        assert b"Generated bracket" in generated.data
+        assert b"BYE" in generated.data
+        duplicate = client.post(
+            "/matches/generate",
+            data={"tournament_id": str(valid_id)},
+            follow_redirects=True,
+        )
+        assert duplicate.status_code == 200
+        assert b"already has generated fixtures" in duplicate.data
+
+    with app.app_context():
+        assert db.session.query(Match).filter_by(tournament_id=valid_id).count() == 3
+
+
+def test_fixture_generation_persists_after_application_restart(tmp_path):
+    database_path = tmp_path / "fixtures-restart.db"
+
+    class FileConfig(TestConfig):
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{database_path}"
+
+    app = create_app(FileConfig)
+    with app.app_context():
+        tournament, _ = _fixture_tournament(4, name="Persistent Bracket")
+        tournament_id = tournament.id
+        db.session.commit()
+    with app.test_client() as client:
+        response = client.post(
+            "/matches/generate", data={"tournament_id": str(tournament_id)}
+        )
+        assert response.status_code == 302
+
+    restarted_app = create_app(FileConfig)
+    with restarted_app.test_client() as client:
+        response = client.get(f"/matches?tournament_id={tournament_id}")
+        assert response.status_code == 200
+        assert b"Generated bracket" in response.data
+        assert b"Persistent Bracket" in response.data
+    with restarted_app.app_context():
+        assert (
+            db.session.query(Match)
+            .filter_by(tournament_id=tournament_id)
+            .count()
+            == 3
+        )
+
+
+def test_fixture_engine_rejects_more_than_64_teams():
+    app = create_app(TestConfig)
+    with app.app_context():
+        tournament, teams = _fixture_tournament(65, name="Too Large")
+        with pytest.raises(ValueError, match="at most 64"):
+            generate_knockout_bracket(tournament, teams)

@@ -19,7 +19,7 @@
           <a class="nav-link {% if request.endpoint in ['main.tournaments', 'main.new_tournament', 'main.tournament_detail', 'main.edit_tournament'] %}is-active{% endif %}" href="{{ url_for('main.tournaments') }}"><span class="nav-icon">◈</span>Tournaments</a>
           <a class="nav-link {% if request.endpoint in ['main.teams', 'main.new_team', 'main.team_detail', 'main.edit_team'] %}is-active{% endif %}" href="{{ url_for('main.teams') }}"><span class="nav-icon">◇</span>Teams</a>
           <a class="nav-link {% if request.endpoint in ['main.players', 'main.new_player', 'main.player_detail', 'main.edit_player'] %}is-active{% endif %}" href="{{ url_for('main.players') }}"><span class="nav-icon">◎</span>Players</a>
-          <a class="nav-link {% if request.endpoint == 'main.matches' %}is-active{% endif %}" href="{{ url_for('main.matches') }}"><span class="nav-icon">↔</span>Match Fixtures</a>
+          <a class="nav-link {% if request.endpoint in ['main.matches', 'main.generate_matches'] %}is-active{% endif %}" href="{{ url_for('main.matches') }}"><span class="nav-icon">↔</span>Match Fixtures</a>
           <p class="nav-label nav-label-spaced">System</p>
           <a class="nav-link {% if request.endpoint == 'main.settings' %}is-active{% endif %}" href="{{ url_for('main.settings') }}"><span class="nav-icon">⚙</span>Settings</a>
         </nav>

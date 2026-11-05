@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .extensions import db
+from .fixture_engine import MAX_TEAMS, generate_knockout_bracket
 from .models import Match, Player, Team, Tournament
 
 
@@ -459,11 +460,77 @@ def player_detail(player_id):
 
 @main_bp.get("/matches")
 def matches():
-    """Placeholder for match fixtures."""
+    """Show tournament selection, fixture eligibility, and any generated bracket."""
 
-    return _placeholder_page(
-        "Match Fixtures", "Fixture generation and bracket management are coming soon."
+    tournament_id_value = request.args.get("tournament_id", "").strip()
+    selected_tournament = None
+    if tournament_id_value:
+        try:
+            selected_tournament = db.session.get(Tournament, int(tournament_id_value))
+        except ValueError:
+            selected_tournament = None
+
+    generated_matches = []
+    bracket_rounds = []
+    if selected_tournament:
+        generated_matches = sorted(
+            selected_tournament.matches,
+            key=lambda match: (match.round_number, match.match_number),
+        )
+        grouped_rounds = {}
+        for match in generated_matches:
+            grouped_rounds.setdefault(match.round_number, []).append(match)
+        bracket_rounds = [
+            {"name": round_matches[0].round_name, "matches": round_matches}
+            for round_matches in grouped_rounds.values()
+        ]
+
+    return render_template(
+        "matches.html",
+        title="Match Fixtures",
+        tournaments=Tournament.query.order_by(Tournament.name.asc()).all(),
+        selected_tournament=selected_tournament,
+        team_count=len(selected_tournament.teams) if selected_tournament else 0,
+        fixture_exists=bool(generated_matches),
+        matches=generated_matches,
+        bracket_rounds=bracket_rounds,
     )
+
+
+@main_bp.post("/matches/generate")
+def generate_matches():
+    """Generate and persist a tournament bracket exactly once."""
+
+    tournament_id_value = request.form.get("tournament_id", "").strip()
+    try:
+        tournament_id = int(tournament_id_value)
+    except (TypeError, ValueError):
+        flash("Select a tournament before generating fixtures.", "error")
+        return redirect(url_for("main.matches"))
+
+    tournament = db.get_or_404(Tournament, tournament_id)
+    if tournament.matches:
+        flash("This tournament already has generated fixtures. Generation is locked.", "error")
+        return redirect(url_for("main.matches", tournament_id=tournament.id))
+
+    teams = list(tournament.teams)
+    if len(teams) < 2:
+        flash("At least 2 registered teams are required to generate fixtures.", "error")
+        return redirect(url_for("main.matches", tournament_id=tournament.id))
+    if len(teams) > MAX_TEAMS:
+        flash(f"A tournament can have at most {MAX_TEAMS} teams.", "error")
+        return redirect(url_for("main.matches", tournament_id=tournament.id))
+
+    try:
+        generate_knockout_bracket(tournament, teams)
+        db.session.commit()
+    except (ValueError, SQLAlchemyError):
+        db.session.rollback()
+        flash("Fixtures could not be generated. No changes were made.", "error")
+        return redirect(url_for("main.matches", tournament_id=tournament.id))
+
+    flash(f"Fixtures generated for {tournament.name}.", "success")
+    return redirect(url_for("main.matches", tournament_id=tournament.id))
 
 
 @main_bp.get("/settings")

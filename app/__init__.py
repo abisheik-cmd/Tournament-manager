@@ -49,6 +49,21 @@ def _ensure_schema_compatibility():
                     text(f"ALTER TABLE players ADD COLUMN {name} {definition}")
                 )
 
+    match_columns = {column["name"] for column in inspector.get_columns("matches")}
+    match_additions = {
+        "round_number": "INTEGER NOT NULL DEFAULT 1",
+        "match_number": "INTEGER NOT NULL DEFAULT 1",
+        "status": "VARCHAR(20) NOT NULL DEFAULT 'scheduled'",
+        "is_bye": "BOOLEAN NOT NULL DEFAULT 0",
+        "next_match_id": "INTEGER",
+    }
+    with db.engine.begin() as connection:
+        for name, definition in match_additions.items():
+            if name not in match_columns:
+                connection.execute(
+                    text(f"ALTER TABLE matches ADD COLUMN {name} {definition}")
+                )
+
 
 def create_app(config_class=Config):
     """Create and configure a Flask application instance."""

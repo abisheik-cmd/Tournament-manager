@@ -81,21 +81,26 @@ class Player(db.Model):
 
 
 class Match(db.Model):
-    """A knockout match between two teams."""
+    """A knockout match or BYE slot in a tournament bracket."""
 
     __tablename__ = "matches"
 
     id = db.Column(db.Integer, primary_key=True)
     round_name = db.Column(db.String(80), nullable=False, default="Round 1")
+    round_number = db.Column(db.Integer, nullable=False, default=1)
+    match_number = db.Column(db.Integer, nullable=False, default=1)
     scheduled_at = db.Column(db.DateTime, nullable=True)
     home_score = db.Column(db.Integer, nullable=True)
     away_score = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="scheduled")
+    is_bye = db.Column(db.Boolean, nullable=False, default=False)
     tournament_id = db.Column(
         db.Integer, db.ForeignKey("tournaments.id"), nullable=False
     )
     home_team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
     away_team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
     winner_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
+    next_match_id = db.Column(db.Integer, db.ForeignKey("matches.id"), nullable=True)
 
     tournament = db.relationship("Tournament", back_populates="matches")
     home_team = db.relationship(
@@ -105,3 +110,9 @@ class Match(db.Model):
         "Team", foreign_keys=[away_team_id], back_populates="away_matches"
     )
     winner = db.relationship("Team", foreign_keys=[winner_id])
+    next_match = db.relationship(
+        "Match",
+        remote_side=[id],
+        foreign_keys=[next_match_id],
+        backref="previous_matches",
+    )
