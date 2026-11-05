@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><p class="eyebrow">Competition library</p><h1>Tournaments</h1><p class="page-subtitle">Browse the competitions registered in your system.</p></div>
+  <a class="button button-primary" href="{{ url_for('main.new_tournament') }}"><span>＋</span> Create tournament</a>
+</section>
+<section class="panel page-panel">
+  {% if tournaments %}
+    <div class="table-wrap"><table><thead><tr><th>Tournament</th><th>Sport</th><th>Date</th><th>Teams</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for tournament in tournaments %}<tr><td><div class="tournament-name"><span class="table-avatar">{{ tournament.name[:1]|upper }}</span><strong>{{ tournament.name }}</strong></div></td><td>{{ tournament.sport }}</td><td>{{ tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—' }}</td><td>{{ tournament.teams|length }}</td><td><span class="badge badge-{{ tournament.status|lower }}">{{ tournament.status|capitalize }}</span></td><td><a class="row-action" href="{{ url_for('main.tournament_detail', tournament_id=tournament.id) }}">View <span>→</span></a></td></tr>{% endfor %}
+    </tbody></table></div>
+  {% else %}<div class="empty-state"><span class="empty-icon">◫</span><h3>Your tournament library is empty</h3><p>Once you create a tournament, it will be listed here.</p><a class="button button-secondary" href="{{ url_for('main.new_tournament') }}">Create tournament</a></div>{% endif %}
+</section>
+{% endblock %}

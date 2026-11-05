@@ -1,6 +1,6 @@
 # Tournament Matchup Generator – Multi-Sport Knockout Management System
 
-A beginner-friendly Flask foundation for managing multi-sport knockout tournaments. The current version focuses on the application structure, SQLite persistence, and core data models; matchup generation and full management workflows will be added later.
+A beginner-friendly Flask foundation for managing multi-sport knockout tournaments. Module 2 adds a responsive dashboard with database-backed statistics, recent tournaments, quick actions, and navigation placeholders. Full matchup generation and management workflows will be added later.
 
 ## Technology
 
@@ -15,14 +15,14 @@ A beginner-friendly Flask foundation for managing multi-sport knockout tournamen
 ```text
 .
 ├── app/
-│   ├── __init__.py       # Application factory and database CLI command
+│   ├── __init__.py       # Application factory, schema compatibility, and CLI command
 │   ├── extensions.py     # Shared SQLAlchemy extension
 │   ├── models.py         # Tournament, Team, Player, and Match models
-│   ├── routes.py         # Web routes
-│   ├── static/           # CSS and vanilla JavaScript
-│   └── templates/        # Jinja templates
+│   ├── routes.py         # Dashboard, tournament, and placeholder routes
+│   ├── static/           # Responsive CSS and vanilla JavaScript
+│   └── templates/        # Dashboard and page templates
 ├── instance/             # Local SQLite database (created at runtime)
-├── tests/                # Foundation tests
+├── tests/                # Foundation and dashboard tests
 ├── config.py             # Application configuration
 ├── requirements.txt      # Python dependencies
 └── run.py                # Development entry point
@@ -45,7 +45,7 @@ The application creates the SQLite database and tables when the app is created. 
 flask --app run.py init-db
 ```
 
-The database is stored at `instance/tournament.db`. It is intentionally not browser localStorage.
+The database is stored at `instance/tournament.db`. It is intentionally not browser localStorage. The application applies a safe additive upgrade to older Module 1 databases by adding the Tournament `status` column when needed.
 
 ## Run the application
 
@@ -53,7 +53,11 @@ The database is stored at `instance/tournament.db`. It is intentionally not brow
 flask --app run.py run --debug
 ```
 
-Open <http://127.0.0.1:5000/> in a browser. Alternatively, run `python run.py`.
+Open <http://127.0.0.1:5000/> in a browser. The home route is the dashboard. Alternatively, run `python run.py`.
+
+## Dashboard
+
+The dashboard reads all statistics and recent tournament rows from SQLite through SQLAlchemy. It includes total, active, and completed tournament counts, total team count, a recent tournaments table, empty states, quick actions, responsive sidebar navigation, and clear placeholder pages for features planned for later modules.
 
 ## Run tests
 

@@ -7,9 +7,37 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   </head>
   <body>
-    <main class="container">
-      {% block content %}{% endblock %}
-    </main>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <span class="brand-mark">TM</span><span class="sr-only">Tournament Matchup Generator</span>
+          <span class="brand-copy"><strong>Tournament</strong><small>Matchup Generator</small></span>
+        </div>
+        <nav class="sidebar-nav" aria-label="Primary navigation">
+          <p class="nav-label">Workspace</p>
+          <a class="nav-link {% if request.endpoint == 'main.home' %}is-active{% endif %}" href="{{ url_for('main.home') }}"><span class="nav-icon">⌂</span>Dashboard</a>
+          <a class="nav-link {% if request.endpoint in ['main.tournaments', 'main.new_tournament', 'main.tournament_detail'] %}is-active{% endif %}" href="{{ url_for('main.tournaments') }}"><span class="nav-icon">◈</span>Tournaments</a>
+          <a class="nav-link {% if request.endpoint == 'main.teams' %}is-active{% endif %}" href="{{ url_for('main.teams') }}"><span class="nav-icon">◇</span>Teams</a>
+          <a class="nav-link {% if request.endpoint == 'main.players' %}is-active{% endif %}" href="{{ url_for('main.players') }}"><span class="nav-icon">◎</span>Players</a>
+          <a class="nav-link {% if request.endpoint == 'main.matches' %}is-active{% endif %}" href="{{ url_for('main.matches') }}"><span class="nav-icon">↔</span>Match Fixtures</a>
+          <p class="nav-label nav-label-spaced">System</p>
+          <a class="nav-link {% if request.endpoint == 'main.settings' %}is-active{% endif %}" href="{{ url_for('main.settings') }}"><span class="nav-icon">⚙</span>Settings</a>
+        </nav>
+        <div class="sidebar-footer"><span class="pulse-dot"></span><span>SQLite connected</span></div>
+      </aside>
+
+      <div class="main-frame">
+        <header class="topbar">
+          <button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
+          <div class="breadcrumb"><span>Workspace</span><span class="breadcrumb-separator">/</span><strong>{{ title or "Dashboard" }}</strong></div>
+          <div class="topbar-meta"><span class="status-dot"></span><span>System ready</span></div>
+        </header>
+
+        <main class="content-area">
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   </body>
 </html>

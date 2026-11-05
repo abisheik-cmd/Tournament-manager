@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading compact-heading"><div><p class="eyebrow">Tournament overview</p><h1>{{ tournament.name }}</h1><p class="page-subtitle">{{ tournament.sport }} · Created {{ tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—' }}</p></div><a class="button button-secondary" href="{{ url_for('main.tournaments') }}">← Back to tournaments</a></section>
+<section class="detail-grid"><div class="panel detail-card"><span class="detail-label">Status</span><span class="badge badge-{{ tournament.status|lower }}">{{ tournament.status|capitalize }}</span></div><div class="panel detail-card"><span class="detail-label">Teams registered</span><strong>{{ tournament.teams|length }}</strong></div><div class="panel detail-card"><span class="detail-label">Matches</span><strong>{{ tournament.matches|length }}</strong></div></section>
+<section class="panel page-panel"><div class="panel-heading"><div><p class="section-kicker">Next step</p><h2>Competition management</h2></div></div><div class="empty-state compact-empty"><span class="empty-icon">✦</span><h3>More tournament tools are coming soon</h3><p>Team registration, fixtures, and bracket management will be added in later modules.</p></div></section>
+{% endblock %}

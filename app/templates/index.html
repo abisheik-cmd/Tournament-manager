@@ -1,12 +1,79 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="hero">
-  <p class="eyebrow">Multi-sport knockout management</p>
-  <h1>Tournament Matchup Generator</h1>
-  <p class="intro">The foundation is ready for tournaments, teams, players, and knockout matches.</p>
-  <div class="status-card" role="status">
-    <strong>Foundation status:</strong> Flask is running and SQLite is configured.
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">Tournament operations</p>
+    <h1>Good morning, organizer.</h1>
+    <p class="page-subtitle">Keep every competition moving from registration to final whistle.</p>
   </div>
+  <a class="button button-primary" href="{{ url_for('main.new_tournament') }}"><span>＋</span> Create tournament</a>
 </section>
+
+{% if dashboard_error %}
+  <div class="notice notice-error" role="alert">{{ dashboard_error }}</div>
+{% endif %}
+
+<section class="stats-grid" aria-label="Tournament statistics">
+  <article class="stat-card stat-card-accent">
+    <div class="stat-card-top"><span class="stat-label">Total tournaments</span><span class="stat-icon">◈</span></div>
+    <strong class="stat-value">{{ stats.total_tournaments }}</strong>
+    <span class="stat-note">All competitions in the system</span>
+  </article>
+  <article class="stat-card">
+    <div class="stat-card-top"><span class="stat-label">Active tournaments</span><span class="stat-icon stat-icon-green">↗</span></div>
+    <strong class="stat-value">{{ stats.active_tournaments }}</strong>
+    <span class="stat-note">Currently in progress</span>
+  </article>
+  <article class="stat-card">
+    <div class="stat-card-top"><span class="stat-label">Completed</span><span class="stat-icon stat-icon-purple">✓</span></div>
+    <strong class="stat-value">{{ stats.completed_tournaments }}</strong>
+    <span class="stat-note">Finished competitions</span>
+  </article>
+  <article class="stat-card">
+    <div class="stat-card-top"><span class="stat-label">Total teams</span><span class="stat-icon stat-icon-orange">♟</span></div>
+    <strong class="stat-value">{{ stats.total_teams }}</strong>
+    <span class="stat-note">Across all tournaments</span>
+  </article>
+</section>
+
+<div class="dashboard-columns">
+  <section class="panel recent-panel">
+    <div class="panel-heading">
+      <div><p class="section-kicker">Overview</p><h2>Recent tournaments</h2></div>
+      <a class="text-link" href="{{ url_for('main.tournaments') }}">View all <span>→</span></a>
+    </div>
+    {% if recent_tournaments %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tournament</th><th>Sport</th><th>Date</th><th>Teams</th><th>Status</th><th><span class="sr-only">Action</span></th></tr></thead>
+          <tbody>
+          {% for tournament in recent_tournaments %}
+            <tr>
+              <td><div class="tournament-name"><span class="table-avatar">{{ tournament.name[:1]|upper }}</span><strong>{{ tournament.name }}</strong></div></td>
+              <td>{{ tournament.sport }}</td>
+              <td>{{ tournament.created_at.strftime('%d %b %Y') if tournament.created_at else '—' }}</td>
+              <td>{{ tournament.teams|length }}</td>
+              <td><span class="badge badge-{{ tournament.status|lower }}">{{ tournament.status|capitalize }}</span></td>
+              <td><a class="row-action" href="{{ url_for('main.tournament_detail', tournament_id=tournament.id) }}" aria-label="View {{ tournament.name }}">View <span>→</span></a></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><span class="empty-icon">◫</span><h3>No tournaments yet</h3><p>Create your first tournament to see it appear here.</p><a class="button button-secondary" href="{{ url_for('main.new_tournament') }}">Create tournament</a></div>
+    {% endif %}
+  </section>
+
+  <aside class="panel quick-panel">
+    <div class="panel-heading"><div><p class="section-kicker">Shortcuts</p><h2>Quick actions</h2></div></div>
+    <div class="quick-actions">
+      <a class="quick-action" href="{{ url_for('main.new_tournament') }}"><span class="quick-icon quick-icon-blue">＋</span><span><strong>Create tournament</strong><small>Set up a new competition</small></span><span class="quick-arrow">→</span></a>
+      <a class="quick-action" href="{{ url_for('main.tournaments') }}"><span class="quick-icon quick-icon-purple">◈</span><span><strong>View tournaments</strong><small>Browse all competitions</small></span><span class="quick-arrow">→</span></a>
+      <a class="quick-action" href="{{ url_for('main.teams') }}"><span class="quick-icon quick-icon-orange">◇</span><span><strong>Manage teams</strong><small>Organize your participants</small></span><span class="quick-arrow">→</span></a>
+    </div>
+    <div class="tip-card"><span class="tip-mark">i</span><p><strong>Build your bracket</strong><br>Fixtures and knockout generation are coming in the next module.</p></div>
+  </aside>
+</div>
 {% endblock %}
