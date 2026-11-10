@@ -9,9 +9,10 @@ from .extensions import db
 
 
 def _ensure_schema_compatibility():
-    """Apply small additive upgrades to an existing SQLite database."""
+    """Apply small additive upgrades to an existing database."""
 
     inspector = inspect(db.engine)
+    is_sqlite = db.engine.dialect.name == "sqlite"
     tournament_columns = {
         column["name"] for column in inspector.get_columns("tournaments")
     }
@@ -51,13 +52,14 @@ def _ensure_schema_compatibility():
                 )
 
     match_columns = {column["name"] for column in inspector.get_columns("matches")}
+    boolean_default = "0" if is_sqlite else "FALSE"
     match_additions = {
         "round_number": "INTEGER NOT NULL DEFAULT 1",
         "match_number": "INTEGER NOT NULL DEFAULT 1",
         "status": "VARCHAR(20) NOT NULL DEFAULT 'scheduled'",
-        "is_bye": "BOOLEAN NOT NULL DEFAULT 0",
+        "is_bye": f"BOOLEAN NOT NULL DEFAULT {boolean_default}",
         "next_match_id": "INTEGER",
-        "decided_by_tiebreaker": "BOOLEAN NOT NULL DEFAULT 0",
+        "decided_by_tiebreaker": f"BOOLEAN NOT NULL DEFAULT {boolean_default}",
     }
     with db.engine.begin() as connection:
         for name, definition in match_additions.items():
@@ -65,10 +67,11 @@ def _ensure_schema_compatibility():
                 connection.execute(
                     text(f"ALTER TABLE matches ADD COLUMN {name} {definition}")
                 )
+        bye_condition = "is_bye = 1" if is_sqlite else "is_bye IS TRUE"
         connection.execute(
             text(
                 "UPDATE matches SET status = 'completed' "
-                "WHERE is_bye = 1 AND winner_id IS NOT NULL AND status = 'bye'"
+                f"WHERE {bye_condition} AND winner_id IS NOT NULL AND status = 'bye'"
             )
         )
 

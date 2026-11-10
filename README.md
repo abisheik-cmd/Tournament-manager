@@ -23,6 +23,7 @@ Tournament organizers often manage registrations, rosters, fixtures, scores, and
 - Flask
 - Flask-SQLAlchemy / SQLAlchemy ORM
 - SQLite with foreign-key enforcement enabled
+- PostgreSQL with Psycopg 3 for hosted production deployments
 - HTML and Jinja templates
 - CSS
 - Vanilla JavaScript
@@ -122,9 +123,11 @@ Authentication and administrator roles are not implemented. The current interfac
 │   │   ├── css/style.css # Responsive application styling
 │   │   └── js/main.js    # Small responsive-navigation behavior
 │   └── templates/        # Shared layout, forms, details, bracket, and error views
+├── public/static/        # Vercel CDN mirrors of the unchanged CSS and JavaScript assets
 ├── instance/             # Local SQLite database directory
 ├── tests/test_app.py     # Full regression and edge-case suite
 ├── config.py             # Environment-aware configuration
+├── pyproject.toml         # Vercel Python entrypoint and runtime metadata
 ├── requirements.txt      # Python dependencies
 └── run.py                # Development entry point
 ```
@@ -149,7 +152,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-The default database is stored at `instance/tournament.db`. The directory is tracked through `.gitkeep`, while runtime database files are ignored by Git.
+The default local database is stored at `instance/tournament.db`. The directory is tracked through `.gitkeep`, while runtime database files are ignored by Git. Local development continues to use SQLite.
 
 For a deployment or controlled environment, provide a secret key through the environment:
 
@@ -157,13 +160,15 @@ For a deployment or controlled environment, provide a secret key through the env
 export SECRET_KEY="replace-with-a-long-random-value"
 ```
 
-An alternate SQLAlchemy database URL can be supplied through `DATABASE_URL`:
+An alternate SQLAlchemy database URL can be supplied through `DATABASE_URL`. PostgreSQL URLs using `postgres://` or plain `postgresql://` are normalized automatically to the Psycopg 3 dialect:
 
 ```bash
 export DATABASE_URL="sqlite:////absolute/path/to/tournament.db"
+# Hosted example:
+export DATABASE_URL="postgresql://user:password@host:5432/tournament_db?sslmode=require"
 ```
 
-The base configuration has `DEBUG = False`. Development debug mode should be explicitly requested with Flask's command-line option rather than being enabled automatically by `run.py`.
+The base configuration has `DEBUG = False`. Development debug mode should be explicitly requested with Flask's command-line option rather than being enabled automatically by `run.py`. When Vercel or another production environment is detected, `SECRET_KEY` and `DATABASE_URL` are required; the local development fallback secret and SQLite path are never used there.
 
 ## Database initialization
 
@@ -196,6 +201,52 @@ python run.py
 ```
 
 Open <http://127.0.0.1:5000/>. The home route is the dashboard.
+
+## Deploy to Vercel
+
+The repository includes a root `pyproject.toml` with the Vercel entrypoint:
+
+```toml
+[tool.vercel]
+entrypoint = "run:app"
+```
+
+The entrypoint loads the existing `app` object exported by `run.py`; no Flask routes, models, templates, or business logic are replaced.
+
+The existing `app/static/` directory remains the local Flask source of truth. Identical copies are also stored under `public/static/` so Vercel can serve them through its CDN as recommended for Python deployments.
+
+### 1. Create a managed PostgreSQL database
+
+Vercel's function filesystem is temporary, so do not use the local SQLite database for permanent hosted tournament data. Create a managed PostgreSQL database through a provider such as Vercel Postgres, Neon, Supabase, or another PostgreSQL-compatible service. Copy its connection URL. The URL may begin with `postgres://`, `postgresql://`, or `postgresql+psycopg://`.
+
+The application creates missing tables and applies only additive compatibility upgrades during startup. It does not drop, recreate, or erase existing records. Existing SQLite data is not automatically migrated to PostgreSQL; export and migrate it separately if needed before switching production traffic.
+
+### 2. Import the GitHub repository
+
+In Vercel, choose **Add New Project**, import `abisheik-cmd/Tournament-manager`, and select the `main` branch. Use the repository root as the project root. No build command is required for this Flask function.
+
+### 3. Add production environment variables
+
+Add these variables for the Production environment before deploying:
+
+```text
+SECRET_KEY=<long-random-production-secret>
+DATABASE_URL=<managed-postgresql-connection-url>
+```
+
+Do not commit either value to the repository. A deployment without either variable fails fast instead of silently using a development secret or a non-persistent SQLite file.
+
+### 4. Deploy and verify
+
+Deploy from the Vercel dashboard or with the current Vercel CLI:
+
+```bash
+npx vercel@latest login
+npx vercel@latest link
+npx vercel@latest deploy --prod
+```
+
+After deployment, open the generated URL and verify the dashboard, tournament CRUD, team/player management, fixture generation, and match scoring workflows. Review Vercel Function logs if the database provider rejects the connection or requires a provider-specific SSL option.
 
 ## Testing and QA
 
@@ -285,8 +336,8 @@ No fabricated screenshots are included. The repository contains no claim of a de
 - Completed match correction is blocked rather than recalculating downstream matches.
 - Match scheduling dates, referee assignment, and live notifications are not implemented.
 - Logo images are referenced by URL and are not uploaded or scanned by the application.
-- SQLite is appropriate for this foundation and small deployments; a production-scale deployment may require a managed database and a production WSGI server.
-- The application has not been deployed as part of this module.
+- SQLite remains appropriate for local development and tests, but permanent Vercel deployments require managed PostgreSQL because Vercel function storage is temporary.
+- The repository contains Vercel deployment configuration, but a live production deployment still depends on the user's Vercel project, environment variables, and managed database.
 
 ## Future enhancements
 
@@ -296,7 +347,7 @@ No fabricated screenshots are included. The repository contains no claim of a de
 - Exportable brackets and tournament reports
 - Richer sport-specific scoring rules
 - Audit history for result changes
-- PostgreSQL support and production WSGI deployment
+- PostgreSQL migrations and production observability
 - Optional genuine screenshots or a hosted demonstration environment
 
 ## Delivery status
