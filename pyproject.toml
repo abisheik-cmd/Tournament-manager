@@ -3,6 +3,13 @@ name = "tournament-matchup-generator"
 version = "0.1.0"
 description = "Multi-sport knockout tournament management system"
 requires-python = ">=3.12,<3.15"
+dependencies = [
+    "Flask==3.1.0",
+    "Flask-SQLAlchemy==3.1.1",
+    "SQLAlchemy>=2.0,<3",
+    "click>=8.1,<9",
+    "psycopg[binary]>=3.2,<4",
+]
 
 [tool.vercel]
 entrypoint = "run:app"
